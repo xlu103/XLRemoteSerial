@@ -6,37 +6,103 @@
   <title>XLRemoteSerial - Portal</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' };</script>
+  <style>
+    .hero-bg{
+      background: radial-gradient(1200px 600px at 50% -100px, rgba(99,102,241,.18), transparent),
+                  radial-gradient(900px 400px at 10% -50px, rgba(59,130,246,.14), transparent),
+                  radial-gradient(900px 400px at 90% -50px, rgba(16,185,129,.12), transparent);
+    }
+  </style>
 </head>
-<body class="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100">
-  <div class="max-w-5xl mx-auto px-6 py-12">
-    <header class="flex items-center justify-between mb-10">
-      <h1 class="text-2xl font-bold">XLRemoteSerial</h1>
-      <div class="flex items-center gap-3">
-        <a href="/" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">本机控制</a>
-        <a href="/viewer.html" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">远程查看</a>
+<body class="min-h-screen bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+  <!-- 顶部导航 -->
+  <header class="sticky top-0 z-10 bg-white/70 dark:bg-slate-900/70 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <div class="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
+      <a href="/" class="flex items-center gap-2 font-semibold">
+        <span class="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-600 text-white text-sm">RS</span>
+        <span>XLRemoteSerial</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-4 text-sm">
+        <a href="/control" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">本机控制</a>
+        <a href="/viewer" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">远程查看</a>
         <button id="toggleTheme" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">夜间模式</button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero-bg">
+    <div class="max-w-3xl mx-auto px-4 py-14 text-center">
+      <div class="inline-flex items-center gap-2 text-xs px-3 py-1 rounded-full border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 mb-5">
+        <span class="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+        <span>实时 WebSocket · FTS5 搜索 · 设备码接入</span>
       </div>
-    </header>
+      <div class="mx-auto mb-6 flex items-center justify-center">
+        <div class="h-20 w-20 rounded-2xl bg-indigo-600 text-white grid place-items-center text-3xl font-bold shadow-lg">R</div>
+      </div>
+      <h1 class="text-3xl md:text-5xl font-extrabold leading-tight mb-4">响应式的远程串口查看与控制</h1>
+      <p class="text-slate-600 dark:text-slate-300 text-base md:text-lg mb-6">
+        在本机浏览器管理串口，同时使用 8 位设备码从任意终端实时查看日志并下发命令，支持历史检索、导出与移动端适配。
+      </p>
+      <div class="flex flex-wrap gap-3 justify-center mb-6">
+        <a href="/control" class="px-5 py-2.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">开始使用（本机控制）</a>
+        <a href="/viewer" class="px-5 py-2.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">远程查看</a>
+      </div>
+   
+    </div>
+  </section>
 
-    <main class="grid gap-6 md:grid-cols-2">
-      <section class="rounded-2xl border border-slate-200 dark:border-slate-800 p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur">
-        <h2 class="text-lg font-semibold mb-2">本机控制</h2>
-        <p class="text-slate-600 dark:text-slate-300 mb-4">管理当前连接的串口设备，查看实时日志、查询历史，并下发命令。</p>
-        <a href="/" class="inline-block px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white">进入</a>
-      </section>
+  <!-- 设备码与快捷入口 -->
+  <section class="py-8">
+    <div class="max-w-4xl mx-auto px-4 grid md:grid-cols-2 gap-4">
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-5 bg-white/60 dark:bg-slate-900/60">
+        <div class="text-sm text-slate-500 mb-2">本机设备码</div>
+        <div class="flex items-center gap-2">
+          <span id="deviceCode" class="px-3 py-1.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono">--------</span>
+          <button id="copyCode" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">复制</button>
+        </div>
+      </div>
+      <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-5 bg-white/60 dark:bg-slate-900/60">
+        <div class="text-sm text-slate-500 mb-2">快速入口</div>
+        <div class="flex flex-wrap gap-3">
+          <a href="/control" class="px-4 py-2 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white">本机控制</a>
+          <a href="/viewer" class="px-4 py-2 rounded-md border border-slate-300 dark:border-slate-700">远程查看</a>
+        </div>
+      </div>
+    </div>
+  </section>
 
-      <section class="rounded-2xl border border-slate-200 dark:border-slate-800 p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur">
-        <h2 class="text-lg font-semibold mb-2">远程查看</h2>
-        <p class="text-slate-600 dark:text-slate-300 mb-4">在任何设备上输入设备码，即可实时查看日志并检索历史，支持口令下发控制。</p>
-        <a href="/viewer.html" class="inline-block px-4 py-2 rounded-md border border-slate-300 dark:border-slate-700">进入</a>
-      </section>
-    </main>
-  </div>
+  <footer class="py-8 text-center text-xs text-slate-500">
+    <div>© 2025 XLRemoteSerial</div>
+  </footer>
+
   <script>
     const btn = document.getElementById('toggleTheme');
     function applyTheme(){ document.body.classList.toggle('dark', localStorage.getItem('theme')==='dark'); }
     applyTheme();
-    btn.onclick = ()=>{ const d=localStorage.getItem('theme')==='dark'; localStorage.setItem('theme', d?'light':'dark'); applyTheme(); };
+    if(btn){ btn.onclick = ()=>{ const d=localStorage.getItem('theme')==='dark'; localStorage.setItem('theme', d?'light':'dark'); applyTheme(); }; }
+
+    // // 复制命令
+    // document.getElementById('copyCmd').onclick = async ()=>{
+    //   const text = document.getElementById('cmd').innerText;
+    //   try{ await navigator.clipboard.writeText(text); alert('已复制'); } catch{ alert('复制失败'); }
+    // };
+
+    // 设备码
+    async function loadDevice(){
+      try{
+        const res = await fetch('/api/device');
+        const data = await res.json();
+        if(data && data.device_code){
+          document.getElementById('deviceCode').textContent = data.device_code;
+        }
+      }catch{}
+    }
+    document.getElementById('copyCode').onclick = async ()=>{
+      const code = document.getElementById('deviceCode').textContent.trim();
+      try{ await navigator.clipboard.writeText(code); alert('已复制设备码：'+code); } catch{ alert('复制失败'); }
+    };
+    loadDevice();
   </script>
 </body>
 </html> 

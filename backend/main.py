@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, DefaultDict
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, PlainTextResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -102,7 +102,6 @@ def init_db() -> None:
 
 def migrate_add_columns() -> None:
 	with db_conn() as conn:
-		# device.control_secret
 		cols = [r[1] for r in conn.execute("PRAGMA table_info(device)").fetchall()]
 		if "control_secret" not in cols:
 			conn.execute("ALTER TABLE device ADD COLUMN control_secret TEXT;")
@@ -351,12 +350,10 @@ async def control_send(req: Request):
 		return JSONResponse(status_code=400, content={"error": "missing fields"})
 	if code != app.state.device.get("device_code"):
 		return JSONResponse(status_code=404, content={"error": "device not found"})
-	# 校验口令
 	with db_conn() as conn:
 		row = conn.execute("SELECT control_secret FROM device WHERE device_code = ?", (code,)).fetchone()
 		if not row or not row[0] or row[0] != token:
 			return JSONResponse(status_code=403, content={"error": "invalid token"})
-	# 简易限流：每 IP 每 2 秒最多 10 次
 	ip = (req.client.host or "unknown")
 	now = time.time()
 	lst = _rate_limit_cache.setdefault(ip, [])
@@ -364,7 +361,6 @@ async def control_send(req: Request):
 	if len(lst) >= 10:
 		return JSONResponse(status_code=429, content={"error": "rate limited"})
 	lst.append(now)
-	# 下发
 	if serial_manager is None or not serial_manager.is_running():
 		return JSONResponse(status_code=503, content={"error": "serial not ready"})
 	try:
@@ -479,12 +475,26 @@ async def ws_view(ws: WebSocket, device_code: str):
 			pass
 
 
-if (STATIC_DIR / "index.html").exists():
-	app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
+# 页面入口：/ -> portal，/control -> 本机控制，/viewer -> 远程查看
+@app.get("/")
+async def page_portal() -> FileResponse:
+	return FileResponse(str(STATIC_DIR / "portal.html"))
+
+
+@app.get("/control")
+async def page_control() -> FileResponse:
+	return FileResponse(str(STATIC_DIR / "index.html"))
+
+
+@app.get("/viewer")
+async def page_viewer() -> FileResponse:
+	return FileResponse(str(STATIC_DIR / "viewer.html"))
+
+
+# 静态资源目录
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR), html=False), name="static")
 
 
 if __name__ == "__main__":
-
-    
 	import uvicorn
 	uvicorn.run("backend.main:app", host="0.0.0.0", port=8000) 
