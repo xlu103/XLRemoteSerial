@@ -103,4 +103,14 @@ class SerialManager:
         return self._thread is not None and self._thread.is_alive()
 
     def current_config(self) -> Optional[SerialConfig]:
-        return self._config 
+        return self._config
+
+    def write_text(self, text: str, append_newline: bool = True) -> None:
+        """向串口写入文本。若配置存在自定义编码则使用该编码。"""
+        with self._lock:
+            if self._serial is None or not self._serial.is_open:
+                raise RuntimeError("串口未打开")
+            cfg = self._config or SerialConfig(port="")
+            payload = (text + ("\r\n" if append_newline else "")).encode(getattr(cfg, "encoding", "utf-8"), errors="replace")
+            self._serial.write(payload)
+            self._serial.flush() 

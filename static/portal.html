@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XLRemoteSerial - Portal</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-slate-50 to-white dark:from-slate-950 dark:to-slate-900 text-slate-900 dark:text-slate-100">
+  <div class="max-w-5xl mx-auto px-6 py-12">
+    <header class="flex items-center justify-between mb-10">
+      <h1 class="text-2xl font-bold">XLRemoteSerial</h1>
+      <div class="flex items-center gap-3">
+        <a href="/" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">本机控制</a>
+        <a href="/viewer.html" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">远程查看</a>
+        <button id="toggleTheme" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">夜间模式</button>
+      </div>
+    </header>
+
+    <main class="grid gap-6 md:grid-cols-2">
+      <section class="rounded-2xl border border-slate-200 dark:border-slate-800 p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur">
+        <h2 class="text-lg font-semibold mb-2">本机控制</h2>
+        <p class="text-slate-600 dark:text-slate-300 mb-4">管理当前连接的串口设备，查看实时日志、查询历史，并下发命令。</p>
+        <a href="/" class="inline-block px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white">进入</a>
+      </section>
+
+      <section class="rounded-2xl border border-slate-200 dark:border-slate-800 p-6 bg-white/70 dark:bg-slate-900/70 backdrop-blur">
+        <h2 class="text-lg font-semibold mb-2">远程查看</h2>
+        <p class="text-slate-600 dark:text-slate-300 mb-4">在任何设备上输入设备码，即可实时查看日志并检索历史，支持口令下发控制。</p>
+        <a href="/viewer.html" class="inline-block px-4 py-2 rounded-md border border-slate-300 dark:border-slate-700">进入</a>
+      </section>
+    </main>
+  </div>
+  <script>
+    const btn = document.getElementById('toggleTheme');
+    function applyTheme(){ document.body.classList.toggle('dark', localStorage.getItem('theme')==='dark'); }
+    applyTheme();
+    btn.onclick = ()=>{ const d=localStorage.getItem('theme')==='dark'; localStorage.setItem('theme', d?'light':'dark'); applyTheme(); };
+  </script>
+</body>
+</html> 

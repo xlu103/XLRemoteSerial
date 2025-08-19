@@ -4,37 +4,49 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>XLRemoteSerial - Viewer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
   <style>
-    :root { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --accent: #1677ff; --warn: #ff9800; --error: #e91e63; --card:#f6f8fa; }
-    .dark { --bg: #0b0f14; --fg: #e5e7eb; --muted: #9aa4b2; --accent: #4e9bff; --warn: #ffb24a; --error: #ff6b8a; --card:#111827; }
-    body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    header { padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    h1 { font-size: 16px; margin: 0 8px 0 0; }
-    input, select, button { padding: 6px 8px; font-size: 14px; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; background: transparent; color: var(--fg); }
-    button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
-    button.secondary { background: transparent; color: var(--fg); border: 1px solid rgba(0,0,0,0.2); }
-    .container { padding: 12px 16px; display: grid; gap: 10px; }
-    .logs { padding: 12px 16px; height: calc(100vh - 140px); overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.4; background: var(--card); border-radius: 8px; }
+    :root { --card:#f6f8fa; }
+    .dark { --card:#111827; }
     .log-line { white-space: pre-wrap; word-break: break-word; }
-    .muted { color: var(--muted); }
-    mark { background: #ffe58f; color: inherit; }
   </style>
 </head>
-<body>
-  <header>
-    <h1>Viewer</h1>
-    <input id="code" placeholder="输入设备码" style="width: 160px" />
-    <button id="connect">连接</button>
-    <button id="toggleTheme" class="secondary">夜间模式</button>
-    <span id="status" class="muted">未连接</span>
+<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+  <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex gap-3 items-center flex-wrap">
+    <h1 class="text-base font-semibold">Viewer</h1>
+    <input id="code" placeholder="输入设备码" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 w-44" />
+    <button id="connect" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">连接</button>
+    <a href="/portal.html" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">入口页</a>
+    <button id="toggleTheme" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">夜间模式</button>
+    <span id="status" class="text-slate-500">未连接</span>
   </header>
-  <div class="container">
-    <div>
-      <input id="q" placeholder="关键字（空格分词）" style="min-width: 220px; width: 40%;" />
-      <button id="search" class="secondary">搜索历史</button>
-      <span id="total" class="muted">共 0 条</span>
+  <div class="p-4 grid gap-3">
+    <div class="flex gap-2 items-center">
+      <input id="q" placeholder="关键字（空格分词）" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 min-w-[220px] w-2/5" />
+      <button id="search" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">搜索历史</button>
+      <span id="total" class="text-slate-500">共 0 条</span>
     </div>
-    <div id="logs" class="logs"></div>
+
+    <div class="rounded-md border border-slate-200 dark:border-slate-800 p-3">
+      <div class="flex flex-wrap gap-3 items-center">
+        <strong>控制台</strong>
+        <input id="token" placeholder="控制口令" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 w-64" />
+        <label class="text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" id="appendNl" checked class="mr-1" /> 追加换行</label>
+        <button id="saveToken" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">保存口令</button>
+      </div>
+      <div class="mt-2">
+        <textarea id="cmd" placeholder="输入要发送的命令" class="w-full min-h-[80px] rounded-md border border-slate-300 dark:border-slate-700 p-2"></textarea>
+      </div>
+      <div class="mt-2 flex justify-between items-center">
+        <div class="text-slate-500 text-sm">提示：需要先在设备侧设置控制口令。</div>
+        <div>
+          <button id="sendCmd" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="logs" class="h-[calc(100vh-240px)] overflow-auto rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 font-mono text-sm"></div>
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
@@ -45,6 +57,11 @@
       document.body.classList.toggle('dark', isDark);
     }
     applyTheme();
+
+    function loadSavedToken() {
+      const t = localStorage.getItem('viewer_token') || '';
+      if (t) $('token').value = t;
+    }
 
     function connectWS(code) {
       try { if (state.ws) state.ws.close(); } catch {}
@@ -96,6 +113,30 @@
         appendLine(it.ts + ' ' + it.content);
       }
     };
+
+    $('saveToken').onclick = () => {
+      const t = $('token').value.trim();
+      localStorage.setItem('viewer_token', t);
+      alert('已保存');
+    };
+
+    $('sendCmd').onclick = async () => {
+      const code = state.code || $('code').value.trim();
+      if (!code) { alert('请先连接设备'); return; }
+      const token = $('token').value.trim();
+      const data = $('cmd').value;
+      if (!token) { alert('请填写控制口令'); return; }
+      if (!data) { alert('请输入命令内容'); return; }
+      const res = await fetch('/api/control/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_code: code, token, data, append_newline: $('appendNl').checked })
+      });
+      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('发送失败：' + (err.error||res.status)); return; }
+      $('cmd').value = '';
+    };
+
+    loadSavedToken();
   </script>
 </body>
 </html> 

@@ -3,6 +3,7 @@ import json
 import os
 import sqlite3
 import secrets
+import time
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -34,16 +35,14 @@ app.add_middleware(
 	allow_headers=["*"],
 )
 
-# 连接管理（本地默认设备与按设备码的房间）
 active_clients: Set[WebSocket] = set()
 code_to_clients: Dict[str, Set[WebSocket]] = {}
-
-# 队列改为携带设备码
 line_queue: asyncio.Queue[Tuple[str, str]] = asyncio.Queue(maxsize=10000)
 serial_manager: Optional[SerialManager] = None
 _db_lock = asyncio.Lock()
 fts_enabled: bool = False
 app.state.device: Dict[str, Any] = {}
+_rate_limit_cache: Dict[str, List[float]] = {}
 
 
 def _enqueue_line_for_device(device_code: str, text: str) -> None:
@@ -79,37 +78,35 @@ def init_db() -> None:
 				id INTEGER PRIMARY KEY,
 				ts TEXT NOT NULL,
 				level TEXT,
-				content TEXT NOT NULL
+				content TEXT NOT NULL,
+				device_id INTEGER
 			);
 			"""
 		)
-		# 设备表
 		conn.execute(
 			"""
 			CREATE TABLE IF NOT EXISTS device (
 				id INTEGER PRIMARY KEY,
 				device_code TEXT UNIQUE NOT NULL,
-				created_at TEXT NOT NULL
+				created_at TEXT NOT NULL,
+				control_secret TEXT
 			);
 			"""
 		)
 		conn.execute("CREATE INDEX IF NOT EXISTS idx_log_ts ON log(ts);")
+		conn.execute("CREATE INDEX IF NOT EXISTS idx_log_device_ts ON log(device_id, ts);")
 		conn.commit()
-	# 补充列迁移：log.device_id
-	migrate_add_device_id_column()
+	migrate_add_columns()
 	init_fts()
 
 
-def migrate_add_device_id_column() -> None:
-	try:
-		with db_conn() as conn:
-			cols = [r[1] for r in conn.execute("PRAGMA table_info(log)").fetchall()]
-			if "device_id" not in cols:
-				conn.execute("ALTER TABLE log ADD COLUMN device_id INTEGER;")
-				conn.execute("CREATE INDEX IF NOT EXISTS idx_log_device_ts ON log(device_id, ts);")
-				conn.commit()
-	except Exception:
-		pass
+def migrate_add_columns() -> None:
+	with db_conn() as conn:
+		# device.control_secret
+		cols = [r[1] for r in conn.execute("PRAGMA table_info(device)").fetchall()]
+		if "control_secret" not in cols:
+			conn.execute("ALTER TABLE device ADD COLUMN control_secret TEXT;")
+			conn.commit()
 
 
 def init_fts() -> None:
@@ -152,30 +149,21 @@ def _generate_device_code(length: int = 8) -> str:
 
 def ensure_device() -> Dict[str, Any]:
 	with db_conn() as conn:
-		row = conn.execute("SELECT id, device_code, created_at FROM device LIMIT 1").fetchone()
+		row = conn.execute("SELECT id, device_code, created_at, control_secret FROM device LIMIT 1").fetchone()
 		if row:
-			return {"id": row[0], "device_code": row[1], "created_at": row[2]}
+			return {"id": row[0], "device_code": row[1], "created_at": row[2], "has_control_secret": bool(row[3])}
 		code = _generate_device_code(8)
 		created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 		cur = conn.execute("INSERT INTO device (device_code, created_at) VALUES (?, ?)", (code, created_at))
 		conn.commit()
 		dev_id = cur.lastrowid
-		return {"id": dev_id, "device_code": code, "created_at": created_at}
-
-
-def migrate_fill_device_id(device_id: int) -> None:
-	with db_conn() as conn:
-		conn.execute("UPDATE log SET device_id = ? WHERE device_id IS NULL OR device_id = ''", (device_id,))
-		conn.commit()
+		return {"id": dev_id, "device_code": code, "created_at": created_at, "has_control_secret": False}
 
 
 def insert_log(content: str, level: str = "info", device_id: Optional[int] = None) -> None:
 	ts = datetime.utcnow().isoformat(timespec="milliseconds") + "Z"
 	with db_conn() as conn:
-		if device_id is None:
-			conn.execute("INSERT INTO log (ts, level, content) VALUES (?, ?, ?);", (ts, level, content))
-		else:
-			conn.execute("INSERT INTO log (ts, level, content, device_id) VALUES (?, ?, ?, ?);", (ts, level, content, device_id))
+		conn.execute("INSERT INTO log (ts, level, content, device_id) VALUES (?, ?, ?, ?);", (ts, level, content, device_id))
 		conn.commit()
 
 
@@ -260,7 +248,6 @@ async def broadcaster() -> None:
 				await ws.close()
 			except Exception:
 				pass
-		# 按设备码广播
 		clients = code_to_clients.get(device_code) or set()
 		dead_room: List[WebSocket] = []
 		for ws in list(clients):
@@ -280,12 +267,7 @@ async def broadcaster() -> None:
 async def on_startup() -> None:
 	global serial_manager
 	init_db()
-	# 确保设备码，并回填历史日志的 device_id
 	app.state.device = ensure_device()
-	try:
-		migrate_fill_device_id(int(app.state.device.get("id")))
-	except Exception:
-		pass
 	loop = asyncio.get_running_loop()
 	serial_manager = SerialManager(lambda text: loop.call_soon_threadsafe(_enqueue_line_for_device, app.state.device["device_code"], text))
 	if CONFIG_PATH.exists():
@@ -321,13 +303,75 @@ async def on_shutdown() -> None:
 
 
 @app.get("/api/health")
-async def health() -> Dict[str, str]:
-	return {"status": "ok", "fts": "on" if fts_enabled else "off", "device_code": app.state.device.get("device_code", "")} if isinstance(app.state.device, dict) else {"status": "ok"}
+async def health() -> Dict[str, Any]:
+	return {
+		"status": "ok",
+		"fts": "on" if fts_enabled else "off",
+		"device_code": app.state.device.get("device_code", ""),
+		"has_control_secret": app.state.device.get("has_control_secret", False),
+	}
 
 
 @app.get("/api/device")
 async def get_device() -> Dict[str, Any]:
 	return app.state.device
+
+
+def _is_local_request(req: Request) -> bool:
+	try:
+		host = (req.client.host or "").strip()
+		return host in {"127.0.0.1", "::1", "localhost"}
+	except Exception:
+		return False
+
+
+@app.post("/api/device/secret")
+async def set_device_secret(req: Request):
+	if not _is_local_request(req):
+		return JSONResponse(status_code=403, content={"error": "forbidden"})
+	body = await req.json()
+	secret = str(body.get("secret", "")).strip()
+	if not secret or len(secret) < 6:
+		return JSONResponse(status_code=400, content={"error": "secret too short"})
+	with db_conn() as conn:
+		conn.execute("UPDATE device SET control_secret = ? WHERE id = ?", (secret, int(app.state.device["id"])) )
+		conn.commit()
+	app.state.device["has_control_secret"] = True
+	return {"ok": True}
+
+
+@app.post("/api/control/send")
+async def control_send(req: Request):
+	body = await req.json()
+	code = str(body.get("device_code", "")).strip()
+	token = str(body.get("token", "")).strip()
+	data = str(body.get("data", ""))
+	append_newline = bool(body.get("append_newline", True))
+	if not code or not token or not data:
+		return JSONResponse(status_code=400, content={"error": "missing fields"})
+	if code != app.state.device.get("device_code"):
+		return JSONResponse(status_code=404, content={"error": "device not found"})
+	# 校验口令
+	with db_conn() as conn:
+		row = conn.execute("SELECT control_secret FROM device WHERE device_code = ?", (code,)).fetchone()
+		if not row or not row[0] or row[0] != token:
+			return JSONResponse(status_code=403, content={"error": "invalid token"})
+	# 简易限流：每 IP 每 2 秒最多 10 次
+	ip = (req.client.host or "unknown")
+	now = time.time()
+	lst = _rate_limit_cache.setdefault(ip, [])
+	lst[:] = [t for t in lst if now - t < 2.0]
+	if len(lst) >= 10:
+		return JSONResponse(status_code=429, content={"error": "rate limited"})
+	lst.append(now)
+	# 下发
+	if serial_manager is None or not serial_manager.is_running():
+		return JSONResponse(status_code=503, content={"error": "serial not ready"})
+	try:
+		serial_manager.write_text(data, append_newline=append_newline)
+		return {"ok": True}
+	except Exception as e:
+		return JSONResponse(status_code=500, content={"error": str(e)})
 
 
 @app.get("/api/config")
@@ -440,5 +484,7 @@ if (STATIC_DIR / "index.html").exists():
 
 
 if __name__ == "__main__":
+
+    
 	import uvicorn
 	uvicorn.run("backend.main:app", host="0.0.0.0", port=8000) 

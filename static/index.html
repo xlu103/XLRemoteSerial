@@ -4,6 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>XLRemoteSerial - Lite</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { darkMode: 'class' };</script>
   <style>
     :root { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --accent: #1677ff; --warn: #ff9800; --error: #e91e63; --card:#f6f8fa; }
     .dark { --bg: #0b0f14; --fg: #e5e7eb; --muted: #9aa4b2; --accent: #4e9bff; --warn: #ffb24a; --error: #ff6b8a; --card:#111827; }
@@ -11,11 +13,11 @@
     header { padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     h1 { font-size: 16px; margin: 0 8px 0 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input, select, button { padding: 6px 8px; font-size: 14px; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; background: transparent; color: var(--fg); }
+    input, select, button, textarea { padding: 6px 8px; font-size: 14px; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; background: transparent; color: var(--fg); }
     button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
     button.secondary { background: transparent; color: var(--fg); border: 1px solid rgba(0,0,0,0.2); }
     .badge { padding: 4px 8px; border-radius: 999px; background: var(--card); border: 1px solid rgba(0,0,0,0.08); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    main { display: grid; grid-template-rows: auto auto 1fr; height: calc(100vh - 56px); }
+    main { display: grid; grid-template-rows: auto auto auto 1fr; height: calc(100vh - 56px); }
     .toolbar { padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .logs { padding: 12px 16px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.4; }
     .log-line { white-space: pre-wrap; word-break: break-word; }
@@ -34,72 +36,90 @@
     }
   </style>
 </head>
-<body>
-  <header>
-    <h1>XLRemoteSerial</h1>
+<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+  <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+    <h1 class="text-base font-semibold">XLRemoteSerial</h1>
     <div class="row">
-      <span id="deviceCode" class="badge" title="设备码">--------</span>
-      <button id="copyCode" class="secondary">复制设备码</button>
+      <span id="deviceCode" class="badge">--------</span>
+      <button id="copyCode" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">复制设备码</button>
     </div>
     <div class="row">
-      <input id="port" placeholder="串口号，例如 COM3" style="width: 160px" />
-      <input id="baudrate" type="number" value="115200" style="width: 110px" />
-      <select id="bytesize">
+      <input id="port" placeholder="串口号，例如 COM3" style="width: 160px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+      <input id="baudrate" type="number" value="115200" style="width: 110px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+      <select id="bytesize" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
         <option value="8" selected>8</option>
         <option value="7">7</option>
       </select>
-      <select id="stopbits">
+      <select id="stopbits" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
         <option value="1" selected>1</option>
         <option value="2">2</option>
       </select>
-      <select id="parity">
+      <select id="parity" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
         <option value="N" selected>N</option>
         <option value="E">E</option>
         <option value="O">O</option>
       </select>
-      <button id="save">保存并连接</button>
-      <button id="toggleTheme" class="secondary">夜间模式</button>
+      <button id="save" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">保存并连接</button>
+      <button id="toggleTheme" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">夜间模式</button>
     </div>
   </header>
   <main>
-    <div class="toolbar">
-      <strong>实时</strong>
-      <button id="pause" class="secondary">暂停</button>
-      <button id="clear" class="secondary">清空</button>
-      <button id="exportTxt" class="secondary hide-mobile">导出 txt</button>
-      <button id="exportCsv" class="secondary hide-mobile">导出 csv</button>
+    <div class="toolbar bg-white dark:bg-slate-900">
+      <strong class="text-slate-700 dark:text-slate-200">实时</strong>
+      <button id="pause" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">暂停</button>
+      <button id="clear" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">清空</button>
+      <button id="exportTxt" class="secondary hide-mobile px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">导出 txt</button>
+      <button id="exportCsv" class="secondary hide-mobile px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">导出 csv</button>
       <span id="status" class="muted">未连接</span>
     </div>
 
-    <div class="card">
+    <div class="card shadow-sm">
       <div class="row" style="gap:12px; align-items: center;">
         <strong>历史查询</strong>
-        <input id="q" placeholder="关键字（空格分词，支持前缀）" style="min-width: 220px; flex: 1;" />
-        <select id="levelFilter">
+        <input id="q" placeholder="关键字（空格分词，支持前缀）" style="min-width: 220px; flex: 1;" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+        <select id="levelFilter" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
           <option value="">全部级别</option>
           <option value="info">info</option>
           <option value="warn">warn</option>
           <option value="error">error</option>
         </select>
-        <input id="timeFrom" class="hide-mobile" placeholder="开始时间 ISO(可选)" style="width: 180px" />
-        <input id="timeTo" class="hide-mobile" placeholder="结束时间 ISO(可选)" style="width: 180px" />
-        <button id="search" class="secondary">搜索</button>
+        <input id="timeFrom" class="hide-mobile px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" placeholder="开始时间 ISO(可选)" style="width: 180px" />
+        <input id="timeTo" class="hide-mobile px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" placeholder="结束时间 ISO(可选)" style="width: 180px" />
+        <button id="search" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">搜索</button>
       </div>
       <div class="row" style="justify-content: space-between; margin-top:8px;">
         <div><span id="total" class="muted">共 0 条</span></div>
         <div>
-          <button id="prev" class="secondary">上一页</button>
-          <button id="next" class="secondary">下一页</button>
+          <button id="prev" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">上一页</button>
+          <button id="next" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">下一页</button>
         </div>
       </div>
       <div id="history" class="history-list"></div>
     </div>
 
-    <div id="logs" class="logs"></div>
+    <div class="card shadow-sm">
+      <div class="row" style="gap:12px; align-items: center;">
+        <strong>控制台</strong>
+        <input id="controlSecret" placeholder="控制口令（仅本机可设置）" style="width: 240px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+        <button id="saveSecret" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">保存口令</button>
+        <label class="text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" id="appendNl" checked class="mr-1" /> 追加换行</label>
+      </div>
+      <div class="row" style="margin-top:8px;">
+        <textarea id="cmd" placeholder="输入要发送的命令" style="width: 100%; min-height: 80px;" class="rounded-md border-slate-300 dark:border-slate-700"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px; justify-content: space-between;">
+        <div class="muted">提示：远程控制需在此设备上先设置控制口令，然后在远程端请求时带上口令。</div>
+        <div>
+          <button id="sendCmd" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">发送</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="logs" class="logs bg-white dark:bg-slate-900"></div>
   </main>
   <script>
     const $ = (id) => document.getElementById(id);
-    const state = { ws: null, paused: false, autoScroll: true, offset: 0, limit: 100, total: 0 };
+    const state = { ws: null, paused: false, autoScroll: true, offset: 0, limit: 100, total: 0, device_code: '' };
 
     function applyTheme() {
       const isDark = localStorage.getItem('theme') === 'dark';
@@ -113,6 +133,7 @@
         const data = await res.json();
         if (data && data.device_code) {
           $('deviceCode').textContent = data.device_code;
+          state.device_code = data.device_code;
         }
       } catch {}
     }
@@ -244,6 +265,25 @@
     $('prev').onclick = () => { const off = state.offset - state.limit; if (off >= 0) search(off); };
     $('next').onclick = () => { const off = state.offset + state.limit; if (off < state.total) search(off); };
     $('q').addEventListener('keydown', (e)=>{ if (e.key==='Enter') search(0); });
+
+    $('saveSecret').onclick = async () => {
+      const secret = $('controlSecret').value.trim();
+      if (secret.length < 6) { alert('口令至少6位'); return; }
+      const res = await fetch('/api/device/secret', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret }) });
+      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('保存失败：' + (err.error||res.status)); return; }
+      alert('已保存');
+    };
+
+    $('sendCmd').onclick = async () => {
+      const token = $('controlSecret').value.trim();
+      const data = $('cmd').value;
+      if (!state.device_code) { alert('设备码未知'); return; }
+      if (!token) { alert('请先填写控制口令'); return; }
+      if (!data) { alert('请输入命令内容'); return; }
+      const res = await fetch('/api/control/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: state.device_code, token, data, append_newline: $('appendNl').checked }) });
+      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('发送失败：' + (err.error||res.status)); return; }
+      $('cmd').value = '';
+    };
 
     loadDevice();
     loadConfig();
