@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>XLRemoteSerial - Viewer</title>
+  <style>
+    :root { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --accent: #1677ff; --warn: #ff9800; --error: #e91e63; --card:#f6f8fa; }
+    .dark { --bg: #0b0f14; --fg: #e5e7eb; --muted: #9aa4b2; --accent: #4e9bff; --warn: #ffb24a; --error: #ff6b8a; --card:#111827; }
+    body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    header { padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    h1 { font-size: 16px; margin: 0 8px 0 0; }
+    input, select, button { padding: 6px 8px; font-size: 14px; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; background: transparent; color: var(--fg); }
+    button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
+    button.secondary { background: transparent; color: var(--fg); border: 1px solid rgba(0,0,0,0.2); }
+    .container { padding: 12px 16px; display: grid; gap: 10px; }
+    .logs { padding: 12px 16px; height: calc(100vh - 140px); overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.4; background: var(--card); border-radius: 8px; }
+    .log-line { white-space: pre-wrap; word-break: break-word; }
+    .muted { color: var(--muted); }
+    mark { background: #ffe58f; color: inherit; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Viewer</h1>
+    <input id="code" placeholder="输入设备码" style="width: 160px" />
+    <button id="connect">连接</button>
+    <button id="toggleTheme" class="secondary">夜间模式</button>
+    <span id="status" class="muted">未连接</span>
+  </header>
+  <div class="container">
+    <div>
+      <input id="q" placeholder="关键字（空格分词）" style="min-width: 220px; width: 40%;" />
+      <button id="search" class="secondary">搜索历史</button>
+      <span id="total" class="muted">共 0 条</span>
+    </div>
+    <div id="logs" class="logs"></div>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const state = { ws: null, code: '', paused: false, autoScroll: true };
+
+    function applyTheme() {
+      const isDark = localStorage.getItem('theme') === 'dark';
+      document.body.classList.toggle('dark', isDark);
+    }
+    applyTheme();
+
+    function connectWS(code) {
+      try { if (state.ws) state.ws.close(); } catch {}
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/view/${encodeURIComponent(code)}`);
+      state.ws = ws; state.code = code;
+      $('status').textContent = '连接中...';
+      ws.onopen = () => $('status').textContent = '已连接';
+      ws.onclose = () => $('status').textContent = '未连接';
+      ws.onerror = () => $('status').textContent = '连接错误';
+      ws.onmessage = (ev) => { appendLine(ev.data); };
+      setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
+    }
+
+    function appendLine(text) {
+      const el = document.createElement('div');
+      el.className = 'log-line';
+      el.textContent = text;
+      $('logs').appendChild(el);
+      if (state.autoScroll) $('logs').scrollTop = $('logs').scrollHeight;
+    }
+
+    $('connect').onclick = () => {
+      const code = $('code').value.trim();
+      if (!code) { alert('请输入设备码'); return; }
+      connectWS(code);
+    };
+
+    $('toggleTheme').onclick = () => {
+      const isDark = localStorage.getItem('theme') === 'dark';
+      localStorage.setItem('theme', isDark ? 'light' : 'dark');
+      applyTheme();
+    };
+
+    $('search').onclick = async () => {
+      const code = state.code || $('code').value.trim();
+      if (!code) { alert('请输入设备码'); return; }
+      const q = $('q').value.trim();
+      const params = new URLSearchParams();
+      params.set('limit', '200');
+      params.set('offset', '0');
+      params.set('device_code', code);
+      if (q) params.set('q', q);
+      const res = await fetch('/api/logs?' + params.toString());
+      const data = await res.json();
+      $('total').textContent = `共 ${data.total||0} 条`;
+      $('logs').innerHTML = '';
+      for (const it of (data.items || [])) {
+        appendLine(it.ts + ' ' + it.content);
+      }
+    };
+  </script>
+</body>
+</html> 

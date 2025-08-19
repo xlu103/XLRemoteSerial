@@ -1,0 +1,7 @@
+{
+  "port": "COM10",
+  "baudrate": 115200,
+  "bytesize": 8,
+  "stopbits": 1,
+  "parity": "N"
+}
