@@ -1,168 +1,238 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>XLRemoteSerial - Lite</title>
+  <title>SerialFlow - 智能串口助手</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { darkMode: 'class' };</script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    };
+  </script>
   <link rel="stylesheet" href="/static/js/serial.css">
   <script src="/static/js/serial.js"></script>
-  <style>
-    :root { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --accent: #1677ff; --warn: #ff9800; --error: #e91e63; --card:#f6f8fa; }
-    .dark { --bg: #0b0f14; --fg: #e5e7eb; --muted: #9aa4b2; --accent: #4e9bff; --warn: #ffb24a; --error: #ff6b8a; --card:#111827; }
-    body { margin: 0; background: var(--bg); color: var(--fg); font-family: -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    header { padding: 12px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-    h1 { font-size: 16px; margin: 0 8px 0 0; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    input, select, button, textarea { padding: 6px 8px; font-size: 14px; border: 1px solid rgba(0,0,0,0.2); border-radius: 6px; background: transparent; color: var(--fg); }
-    button { cursor: pointer; background: var(--accent); color: #fff; border: none; }
-    button.secondary { background: transparent; color: var(--fg); border: 1px solid rgba(0,0,0,0.2); }
-    .badge { padding: 4px 8px; border-radius: 999px; background: var(--card); border: 1px solid rgba(0,0,0,0.08); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    main { display: grid; grid-template-rows: auto auto auto 1fr; height: calc(100vh - 56px); }
-    .toolbar { padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.06); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .logs { padding: 12px 16px; overflow: auto; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.4; }
-    .log-line { white-space: pre-wrap; word-break: break-word; }
-    .muted { color: var(--muted); }
-    .info { }
-    .warn { color: var(--warn); }
-    .error { color: var(--error); }
-    .card { background: var(--card); padding: 10px; margin: 8px 16px; border-radius: 8px; }
-    .history-list { max-height: 40vh; overflow: auto; }
-    .history-item { padding: 6px 0; border-bottom: 1px dashed rgba(0,0,0,0.1); }
-    .ts { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-    mark { background: #ffe58f; color: inherit; }
-    @media (max-width: 640px) {
-      .hide-mobile { display: none; }
-      .logs { font-size: 12px; }
-    }
-  </style>
 </head>
-<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-  <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800">
-    <h1 class="text-base font-semibold">XLRemoteSerial</h1>
-    <div class="row">
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-slate-600 dark:text-slate-400">设备码:</span>
-        <span id="deviceCode" class="badge font-mono text-lg tracking-wider bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">--------</span>
-        <button id="copyCode" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">复制</button>
-      </div>
-    </div>
-    <div class="row">
-      <button id="connectBtn" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">连接串口</button>
-      <button id="disconnectBtn" class="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white" style="display: none;">断开连接</button>
-      <div class="flex items-center gap-2">
-        <span class="text-sm text-slate-600 dark:text-slate-400">状态:</span>
-        <span id="connectionStatus" class="px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium">未连接</span>
-      </div>
-      <button id="toggleTheme" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">夜间模式</button>
-      <button id="toggleDebug" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">调试模式</button>
-    </div>
-    
-    <!-- 串口配置面板 -->
-    <div id="configPanel" class="row" style="display: none;">
-      <input id="baudrate" type="number" value="115200" style="width: 110px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
-      <select id="bytesize" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
-        <option value="8" selected>8</option>
-        <option value="7">7</option>
-      </select>
-      <select id="stopbits" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
-        <option value="1" selected>1</option>
-        <option value="2">2</option>
-      </select>
-      <select id="parity" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
-        <option value="none" selected>无</option>
-        <option value="even">偶校验</option>
-        <option value="odd">奇校验</option>
-      </select>
-      <button id="applyConfig" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white">应用配置</button>
-    </div>
-  </header>
-  <main>
-    <div class="toolbar bg-white dark:bg-slate-900">
-      <strong class="text-slate-700 dark:text-slate-200">实时</strong>
-      <button id="pause" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">暂停</button>
-      <button id="clear" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">清空</button>
-      <button id="exportTxt" class="secondary hide-mobile px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">导出 txt</button>
-      <button id="exportCsv" class="secondary hide-mobile px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">导出 csv</button>
-      <span id="status" class="muted">未连接</span>
-    </div>
-
-    <div class="card shadow-sm">
-      <div class="row" style="gap:12px; align-items: center;">
-        <strong>历史查询</strong>
-        <input id="q" placeholder="关键字（空格分词，支持前缀）" style="min-width: 220px; flex: 1;" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
-        <select id="levelFilter" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
-          <option value="">全部级别</option>
-          <option value="info">info</option>
-          <option value="warn">warn</option>
-          <option value="error">error</option>
-        </select>
-        <input id="timeFrom" class="hide-mobile px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" placeholder="开始时间 ISO(可选)" style="width: 180px" />
-        <input id="timeTo" class="hide-mobile px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" placeholder="结束时间 ISO(可选)" style="width: 180px" />
-        <button id="search" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">搜索</button>
-      </div>
-      <div class="row" style="justify-content: space-between; margin-top:8px;">
-        <div><span id="total" class="muted">共 0 条</span></div>
-        <div>
-          <button id="prev" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">上一页</button>
-          <button id="next" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">下一页</button>
+<body class="bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen">
+  <!-- 顶部导航栏 -->
+  <nav class="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <div class="flex-shrink-0 flex items-center">
+            <svg class="h-8 w-8 text-primary-600" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            </svg>
+            <span class="ml-2 text-xl font-semibold">SerialFlow</span>
+          </div>
         </div>
-      </div>
-      <div id="history" class="history-list"></div>
-    </div>
-
-    <!-- 控制命令输入区域 -->
-    <div class="card shadow-sm">
-      <div class="row" style="gap:12px; align-items: center;">
-        <strong>控制命令</strong>
-        <input id="commandInput" placeholder="输入控制命令" style="min-width: 220px; flex: 1;" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
-        <button id="sendCommand" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white">发送</button>
-        <button id="clearCommand" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">清空</button>
-      </div>
-      <div class="row" style="margin-top: 8px;">
-        <label class="flex items-center gap-2">
-          <input type="checkbox" id="appendNewline" checked class="rounded">
-          <span class="text-sm">自动添加换行符</span>
-        </label>
-      </div>
-    </div>
-
-    <div class="card shadow-sm">
-      <div class="row" style="gap:12px; align-items: center;">
-        <strong>控制台</strong>
-        <input id="controlSecret" placeholder="控制口令（仅本机可设置）" style="width: 240px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
-        <button id="saveSecret" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">保存口令</button>
-        <label class="text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" id="appendNl" checked class="mr-1" /> 追加换行</label>
-      </div>
-      <div class="row" style="margin-top:8px;">
-        <textarea id="cmd" placeholder="输入要发送的命令" style="width: 100%; min-height: 80px;" class="rounded-md border-slate-300 dark:border-slate-700"></textarea>
-      </div>
-      <div class="row" style="margin-top:8px; justify-content: space-between;">
-        <div class="muted">提示：远程控制需在此设备上先设置控制口令，然后在远程端请求时带上口令。</div>
-        <div>
-          <button id="sendCmd" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">发送</button>
+        <div class="flex items-center space-x-4">
+          <button id="toggleTheme" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
+  </nav>
 
-    <div id="logs" class="logs bg-white dark:bg-slate-900"></div>
-  </main>
+  <!-- 主要内容区域 -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-12 gap-6">
+      <!-- 左侧面板 - 连接配置 -->
+      <div class="col-span-12 lg:col-span-3">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+          <h2 class="text-lg font-medium mb-4">连接配置</h2>
+          
+          <!-- 设备码显示 -->
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">设备码</label>
+            <div class="flex items-center space-x-2">
+              <code id="deviceCode" class="flex-1 px-3 py-2 bg-gray-100 dark:bg-slate-700 rounded-md font-mono">--------</code>
+              <button id="copyCode" class="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- 串口参数配置 -->
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">波特率</label>
+              <select id="baudrate" class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                <option value="115200">115200</option>
+                <option value="9600">9600</option>
+                <option value="57600">57600</option>
+                <option value="38400">38400</option>
+                <option value="19200">19200</option>
+                <option value="4800">4800</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">数据位</label>
+              <select id="bytesize" class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                <option value="8">8</option>
+                <option value="7">7</option>
+                <option value="6">6</option>
+                <option value="5">5</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">停止位</label>
+              <select id="stopbits" class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                <option value="1">1</option>
+                <option value="2">2</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">校验位</label>
+              <select id="parity" class="w-full rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                <option value="none">无校验</option>
+                <option value="even">偶校验</option>
+                <option value="odd">奇校验</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- 连接按钮 -->
+          <div class="mt-6 space-y-3">
+            <button id="connectBtn" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+              连接串口
+            </button>
+            <button id="disconnectBtn" style="display: none;" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500">
+              断开连接
+            </button>
+          </div>
+
+          <!-- 连接状态 -->
+          <div class="mt-4">
+            <div class="flex items-center space-x-2">
+              <span class="text-sm text-gray-500 dark:text-gray-400">状态:</span>
+              <span id="connectionStatus" class="text-sm font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-slate-700">
+                未连接
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧面板 - 数据显示和控制 -->
+      <div class="col-span-12 lg:col-span-9 space-y-6">
+        <!-- 数据统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">连接状态</h3>
+            <div class="mt-2 flex items-center">
+              <div class="flex-shrink-0">
+                <div id="connectionIcon" class="h-4 w-4 rounded-full bg-gray-400"></div>
+              </div>
+              <div class="ml-3">
+                <div class="text-lg font-semibold" id="connectionText">活跃</div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">消息数量</h3>
+            <div class="mt-2">
+              <div class="text-lg font-semibold" id="messageCount">1</div>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">波特率</h3>
+            <div class="mt-2">
+              <div class="text-lg font-semibold" id="currentBaudrate">115200</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 数据控制台 -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+          <div class="p-4 border-b border-gray-200 dark:border-slate-700">
+            <div class="flex items-center justify-between">
+              <h2 class="text-lg font-medium">数据控制台</h2>
+              <div class="flex items-center space-x-2">
+                <button id="pause" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                  暂停
+                </button>
+                <button id="clear" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                  清空
+                </button>
+                <button id="exportTxt" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                  导出TXT
+                </button>
+                <button id="exportCsv" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                  导出CSV
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="logs" class="h-96 overflow-auto p-4 font-mono text-sm"></div>
+        </div>
+
+        <!-- 命令输入区域 -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+          <h2 class="text-lg font-medium mb-4">发送命令</h2>
+          <div class="space-y-4">
+            <div class="flex items-center space-x-4">
+              <input type="text" id="commandInput" placeholder="输入要发送的命令" class="flex-1 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+              <button id="sendCommand" class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">
+                发送
+              </button>
+            </div>
+            <div class="flex items-center space-x-2">
+              <input type="checkbox" id="appendNewline" class="rounded border-gray-300 dark:border-slate-600">
+              <label for="appendNewline" class="text-sm text-gray-700 dark:text-gray-300">自动添加换行符</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
-    const state = { ws: null, paused: false, autoScroll: true, offset: 0, limit: 100, total: 0, device_code: '' };
-    
+    const state = { 
+      ws: null, 
+      paused: false, 
+      autoScroll: true, 
+      device_code: '',
+      messageCount: 0
+    };
+
     // 检查浏览器是否支持Web Serial API
     if (!window.serialManager || !window.serialManager.isSupported()) {
-        alert('您的浏览器不支持Web Serial API，请使用Chrome 89+或Edge 89+版本');
+      alert('您的浏览器不支持Web Serial API，请使用Chrome 89+或Edge 89+版本');
     }
 
+    // 主题切换
     function applyTheme() {
       const isDark = localStorage.getItem('theme') === 'dark';
-      document.body.classList.toggle('dark', isDark);
+      document.documentElement.classList.toggle('dark', isDark);
     }
     applyTheme();
 
+    // 加载设备信息
     async function loadDevice() {
       try {
         const res = await fetch('/api/device');
@@ -173,7 +243,6 @@
         }
       } catch (error) {
         console.error('加载设备信息失败:', error);
-        // 如果没有设备，显示默认值
         $('deviceCode').textContent = '--------';
       }
     }
@@ -211,6 +280,7 @@
       }
     }
 
+    // 加载配置
     async function loadConfig() {
       try {
         const res = await fetch('/api/config');
@@ -219,125 +289,112 @@
         $('bytesize').value = cfg.bytesize ?? 8;
         $('stopbits').value = cfg.stopbits ?? 1;
         $('parity').value = cfg.parity ?? 'none';
+        $('currentBaudrate').textContent = cfg.baudrate ?? 115200;
       } catch {}
     }
 
-    // 串口连接功能
+    // 串口连接
     async function connectSerial() {
-        try {
-            const options = {
-                baudrate: parseInt($('baudrate').value),
-                bytesize: parseInt($('bytesize').value),
-                stopbits: parseFloat($('stopbits').value),
-                parity: $('parity').value
-            };
-            
-            // 先连接串口
-            await window.serialManager.connect(options);
-            
-            // 获取串口信息用于创建设备
-            const portInfo = window.serialManager.getPortInfo();
-            const portName = portInfo ? portInfo.usbProductId || portInfo.usbVendorId || 'Unknown' : 'Unknown';
-            
-            // 为新的串口连接创建设备
-            const deviceCode = await createDeviceForPort(portName);
-            if (!deviceCode) {
-                throw new Error('创建设备失败');
-            }
-            
-            // 设置数据接收回调
-            window.serialManager.setDataCallback(async (data) => {
-                // 数据完整性检查
-                if (data && typeof data === 'string' && data.trim()) {
-                    appendLine(data, 'info');
-                    
-                    // 发送数据到后端API，供远程查看者接收
-                    try {
-                        await window.serialManager.sendDataToBackend(deviceCode, data);
-                    } catch (error) {
-                        console.error('发送数据到后端失败:', error);
-                    }
-                }
-            });
-            
-            // 设置连接状态回调
-            window.serialManager.setConnectionCallback((connected) => {
-                updateConnectionUI(connected);
-            });
-            
-            updateConnectionUI(true);
-            $('configPanel').style.display = 'flex';
-            
-            // 显示连接成功消息
-            appendLine(`[系统] 串口连接成功，设备码: ${deviceCode}`, 'info');
-            
-        } catch (error) {
-            console.error('连接失败:', error);
-            alert('连接失败: ' + error.message);
+      try {
+        const options = {
+          baudrate: parseInt($('baudrate').value),
+          bytesize: parseInt($('bytesize').value),
+          stopbits: parseFloat($('stopbits').value),
+          parity: $('parity').value
+        };
+        
+        await window.serialManager.connect(options);
+        const portInfo = window.serialManager.getPortInfo();
+        const portName = portInfo ? portInfo.usbProductId || portInfo.usbVendorId || 'Unknown' : 'Unknown';
+        
+        const deviceCode = await createDeviceForPort(portName);
+        if (!deviceCode) {
+          throw new Error('创建设备失败');
         }
+        
+        window.serialManager.setDataCallback(async (data) => {
+          if (data && typeof data === 'string' && data.trim()) {
+            appendLine(data, 'info');
+            try {
+              await window.serialManager.sendDataToBackend(deviceCode, data);
+            } catch (error) {
+              console.error('发送数据到后端失败:', error);
+            }
+          }
+        });
+        
+        window.serialManager.setConnectionCallback((connected) => {
+          updateConnectionUI(connected);
+        });
+        
+        updateConnectionUI(true);
+        $('currentBaudrate').textContent = options.baudrate;
+        appendLine(`[系统] 串口连接成功，设备码: ${deviceCode}`, 'info');
+        
+      } catch (error) {
+        console.error('连接失败:', error);
+        alert('连接失败: ' + error.message);
+      }
     }
 
-    // 断开串口连接
+    // 断开连接
     async function disconnectSerial() {
-        try {
-            await window.serialManager.disconnect();
-            updateConnectionUI(false);
-            $('configPanel').style.display = 'none';
-        } catch (error) {
-            console.error('断开连接失败:', error);
-        }
+      try {
+        await window.serialManager.disconnect();
+        updateConnectionUI(false);
+      } catch (error) {
+        console.error('断开连接失败:', error);
+      }
     }
 
     // 更新连接状态UI
     function updateConnectionUI(connected) {
-        if (connected) {
-            $('connectBtn').style.display = 'none';
-            $('disconnectBtn').style.display = 'inline-block';
-            $('connectionStatus').textContent = '已连接';
-            $('connectionStatus').className = 'px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300';
-        } else {
-            $('connectBtn').style.display = 'inline-block';
-            $('disconnectBtn').style.display = 'none';
-            $('connectionStatus').textContent = '未连接';
-            $('connectionStatus').className = 'px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
-        }
+      if (connected) {
+        $('connectBtn').style.display = 'none';
+        $('disconnectBtn').style.display = 'block';
+        $('connectionStatus').textContent = '已连接';
+        $('connectionStatus').className = 'text-sm font-medium px-2 py-1 rounded-md bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200';
+        $('connectionIcon').className = 'h-4 w-4 rounded-full bg-green-500';
+        $('connectionText').textContent = '已连接';
+      } else {
+        $('connectBtn').style.display = 'block';
+        $('disconnectBtn').style.display = 'none';
+        $('connectionStatus').textContent = '未连接';
+        $('connectionStatus').className = 'text-sm font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-slate-700';
+        $('connectionIcon').className = 'h-4 w-4 rounded-full bg-gray-400';
+        $('connectionText').textContent = '未连接';
+      }
     }
 
-    // 发送控制命令
+    // 发送命令
     async function sendCommand() {
-        const command = $('commandInput').value.trim();
-        if (!command) return;
+      const command = $('commandInput').value.trim();
+      if (!command) return;
+      
+      if (!state.device_code || state.device_code === '--------') {
+        alert('请先连接串口设备');
+        return;
+      }
+      
+      try {
+        const appendNewline = $('appendNewline').checked;
+        const commandToSend = appendNewline ? command + '\n' : command;
         
-        // 检查是否有设备码
-        if (!state.device_code || state.device_code === '--------') {
-            alert('请先连接串口设备');
-            return;
-        }
+        await window.serialManager.writeData(commandToSend);
+        appendLine(`> ${command}`, 'warn');
         
         try {
-            const appendNewline = $('appendNewline').checked;
-            const commandToSend = appendNewline ? command + '\n' : command;
-            
-            // 发送到串口设备
-            await window.serialManager.writeData(commandToSend);
-            
-            // 显示发送的命令
-            appendLine(`> ${command}`, 'warn');
-            
-            // 同时发送到后端API，供远程查看者接收
-            try {
-                await window.serialManager.sendDataToBackend(state.device_code, `[SENT] ${command}`);
-            } catch (error) {
-                console.error('发送命令到后端失败:', error);
-            }
-            
-            // 清空输入框
-            $('commandInput').value = '';
-            
+          await window.serialManager.sendDataToBackend(state.device_code, `[SENT] ${command}`);
         } catch (error) {
-            console.error('发送命令失败:', error);
-            alert('发送命令失败: ' + error.message);
+          console.error('发送命令到后端失败:', error);
         }
+        
+        $('commandInput').value = '';
+        
+      } catch (error) {
+        console.error('发送命令失败:', error);
+        alert('发送命令失败: ' + error.message);
+      }
     }
 
     // 应用串口配置
@@ -362,10 +419,20 @@
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
       state.ws = ws;
-      $('status').textContent = '连接中...';
-      ws.onopen = () => $('status').textContent = '已连接';
-      ws.onclose = () => $('status').textContent = '未连接';
-      ws.onerror = () => $('status').textContent = '连接错误';
+      // The status element is removed from the new HTML, so this line is no longer needed.
+      // $('status').textContent = '连接中...';
+      ws.onopen = () => { 
+        // The status element is removed from the new HTML, so this line is no longer needed.
+        // $('status').textContent = '已连接';
+      };
+      ws.onclose = () => { 
+        // The status element is removed from the new HTML, so this line is no longer needed.
+        // $('status').textContent = '未连接';
+      };
+      ws.onerror = () => { 
+        // The status element is removed from the new HTML, so this line is no longer needed.
+        // $('status').textContent = '连接错误';
+      };
       ws.onmessage = (ev) => {
         if (state.paused) return;
         appendLine(ev.data, 'info');
@@ -373,107 +440,83 @@
       setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
     }
 
-    function appendLine(text, level='info') {
-      const el = document.createElement('div');
-      el.className = `log-line ${level}`;
+    // 添加日志行
+    function appendLine(text, level = 'info') {
+      if (state.paused) return;
       
-      // 添加时间戳
+      const el = document.createElement('div');
+      el.className = `mb-1 ${level === 'info' ? 'text-slate-700 dark:text-slate-300' : level === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`;
+      
       const now = new Date();
       const timestamp = now.toLocaleTimeString();
       
-      // 格式化显示内容
-      if (text.startsWith('[系统]') || text.startsWith('[SENT]') || text.startsWith('[CONTROL]') || text.startsWith('[调试]')) {
-        // 系统消息和命令使用特殊格式
-        el.innerHTML = `<span class="text-gray-500 text-xs">${timestamp}</span> <span class="font-medium">${text}</span>`;
+      if (text.startsWith('[系统]') || text.startsWith('[SENT]') || text.startsWith('[CONTROL]')) {
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium">${text}</span>`;
       } else {
-        // 普通数据 - 检查是否可能是不完整的数据
-        const isIncomplete = text.length < 10 && !text.includes(' ') && !text.includes('\t');
-        const dataClass = isIncomplete ? 'text-orange-600 dark:text-orange-400' : '';
-        el.innerHTML = `<span class="text-gray-500 text-xs">${timestamp}</span> <span class="${dataClass}">${text}</span>`;
-        
-        // 如果检测到可能不完整的数据，添加提示
-        if (isIncomplete && window.serialManager && window.serialManager.debugMode) {
-          console.warn(`可能不完整的数据: "${text}" (长度: ${text.length})`);
-        }
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> ${text}`;
       }
       
       $('logs').appendChild(el);
       
-      // 自动滚动到底部
       if (state.autoScroll) {
         $('logs').scrollTop = $('logs').scrollHeight;
       }
       
-      // 限制日志条数，防止内存占用过多
+      // 更新消息计数
+      state.messageCount++;
+      $('messageCount').textContent = state.messageCount;
+      
+      // 限制日志条数
       const maxLines = 1000;
       while ($('logs').children.length > maxLines) {
         $('logs').removeChild($('logs').firstChild);
       }
     }
 
-    // 串口连接相关事件
+    // 事件绑定
     $('connectBtn').onclick = connectSerial;
     $('disconnectBtn').onclick = disconnectSerial;
-    $('applyConfig').onclick = applySerialConfig;
-    
-    // 控制命令相关事件
+    // The applyConfig button is removed from the new HTML, so this line is no longer needed.
+    // $('applyConfig').onclick = applySerialConfig;
     $('sendCommand').onclick = sendCommand;
-    $('clearCommand').onclick = () => { $('commandInput').value = ''; };
-    
-    // 回车键发送命令
     $('commandInput').onkeypress = (e) => {
       if (e.key === 'Enter') {
         sendCommand();
       }
     };
-
-    // 调试模式切换
-    $('toggleDebug').onclick = () => {
-      if (window.serialManager) {
-        const currentDebug = window.serialManager.debugMode;
-        window.serialManager.setDebugMode(!currentDebug);
-        
-        // 更新按钮状态
-        $('toggleDebug').textContent = !currentDebug ? '关闭调试' : '调试模式';
-        $('toggleDebug').className = !currentDebug ? 
-          'secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 bg-yellow-100 dark:bg-yellow-800' :
-          'secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800';
-        
-        // 显示调试信息
-        if (!currentDebug) {
-          const stats = window.serialManager.getBufferStats();
-          appendLine(`[调试] 调试模式已开启，缓冲区统计: ${JSON.stringify(stats)}`, 'info');
-        } else {
-          appendLine('[调试] 调试模式已关闭', 'info');
-        }
-      }
-    };
     
     $('copyCode').onclick = async () => {
       const code = $('deviceCode').textContent.trim();
-      try { await navigator.clipboard.writeText(code); alert('已复制设备码：' + code); } catch { alert('复制失败'); }
+      try {
+        await navigator.clipboard.writeText(code);
+        alert('已复制设备码：' + code);
+      } catch {
+        alert('复制失败');
+      }
     };
 
-    $('save').onclick = async () => {
-      const body = {
-        port: $('port').value.trim(),
-        baudrate: +$('baudrate').value,
-        bytesize: +$('bytesize').value,
-        stopbits: +$('stopbits').value,
-        parity: $('parity').value,
-      };
-      if (!body.port) { alert('请输入串口号'); return; }
-      const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      const ok = res.ok;
-      if (!ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('设置失败：' + (err.error||res.status)); return; }
-      connectWS();
-    };
+    // The save button is removed from the new HTML, so this line is no longer needed.
+    // $('save').onclick = async () => {
+    //   const body = {
+    //     port: $('port').value.trim(),
+    //     baudrate: +$('baudrate').value,
+    //     bytesize: +$('bytesize').value,
+    //     stopbits: +$('stopbits').value,
+    //     parity: $('parity').value,
+    //   };
+    //   if (!body.port) { alert('请输入串口号'); return; }
+    //   const res = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    //   const ok = res.ok;
+    //   if (!ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('设置失败：' + (err.error||res.status)); return; }
+    //   connectWS();
+    // };
 
-    $('toggleTheme').onclick = () => {
-      const isDark = localStorage.getItem('theme') === 'dark';
-      localStorage.setItem('theme', isDark ? 'light' : 'dark');
-      applyTheme();
-    };
+    // The toggleTheme button is now in the header, so this line is no longer needed.
+    // $('toggleTheme').onclick = () => {
+    //   const isDark = localStorage.getItem('theme') === 'dark';
+    //   localStorage.setItem('theme', isDark ? 'light' : 'dark');
+    //   applyTheme();
+    // };
 
     $('pause').onclick = () => {
       state.paused = !state.paused;
@@ -483,81 +526,93 @@
     $('clear').onclick = () => {
       if (!confirm('确认清空当前页面日志展示？')) return;
       $('logs').innerHTML = '';
+      state.messageCount = 0;
+      $('messageCount').textContent = '0';
     };
 
     $('exportTxt').onclick = () => window.open('/api/logs/export?format=txt', '_blank');
     $('exportCsv').onclick = () => window.open('/api/logs/export?format=csv', '_blank');
 
-    function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    // The escRe function is no longer needed as it's not used in the new HTML.
+    // function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-    function renderHistory(items, q) {
-      const box = $('history');
-      box.innerHTML = '';
-      const query = (q||'').trim();
-      let re = null;
-      if (query) {
-        const parts = query.split(/\s+/).filter(Boolean).map(escRe);
-        if (parts.length) re = new RegExp('(' + parts.join('|') + ')', 'ig');
-      }
-      for (const it of items) {
-        const row = document.createElement('div');
-        row.className = 'history-item';
-        const ts = document.createElement('div'); ts.className = 'ts muted'; ts.textContent = it.ts + (it.level ? ` · ${it.level}` : '');
-        const ct = document.createElement('div');
-        if (re) {
-          const segs = it.content.split(re);
-          for (let i=0;i<segs.length;i++) {
-            if (i%2===1) { const m=document.createElement('mark'); m.textContent=segs[i]; ct.appendChild(m); }
-            else { ct.appendChild(document.createTextNode(segs[i])); }
-          }
-        } else {
-          ct.textContent = it.content;
-        }
-        row.appendChild(ts); row.appendChild(ct);
-        box.appendChild(row);
-      }
-    }
+    // The renderHistory function is no longer needed as it's not used in the new HTML.
+    // function renderHistory(items, q) {
+    //   const box = $('history');
+    //   box.innerHTML = '';
+    //   const query = (q||'').trim();
+    //   let re = null;
+    //   if (query) {
+    //     const parts = query.split(/\s+/).filter(Boolean).map(escRe);
+    //     if (parts.length) re = new RegExp('(' + parts.join('|') + ')', 'ig');
+    //   }
+    //   for (const it of items) {
+    //     const row = document.createElement('div');
+    //     row.className = 'history-item';
+    //     const ts = document.createElement('div'); ts.className = 'ts muted'; ts.textContent = it.ts + (it.level ? ` · ${it.level}` : '');
+    //     const ct = document.createElement('div');
+    //     if (re) {
+    //       const segs = it.content.split(re);
+    //       for (let i=0;i<segs.length;i++) {
+    //         if (i%2===1) { const m=document.createElement('mark'); m.textContent=segs[i]; ct.appendChild(m); }
+    //         else { ct.appendChild(document.createTextNode(segs[i])); }
+    //       }
+    //     } else {
+    //       ct.textContent = it.content;
+    //     }
+    //     row.appendChild(ts); row.appendChild(ct);
+    //     box.appendChild(row);
+    //   }
+    // }
 
-    async function search(offset=0) {
-      state.offset = Math.max(0, offset);
-      const params = new URLSearchParams();
-      params.set('limit', String(state.limit));
-      params.set('offset', String(state.offset));
-      const q = $('q').value.trim(); if (q) params.set('q', q);
-      const lv = $('levelFilter').value; if (lv) params.set('level', lv);
-      const tf = $('timeFrom').value.trim(); if (tf) params.set('time_from', tf);
-      const tt = $('timeTo').value.trim(); if (tt) params.set('time_to', tt);
-      const res = await fetch('/api/logs?' + params.toString());
-      const data = await res.json();
-      state.total = data.total || 0;
-      $('total').textContent = `共 ${state.total} 条`;
-      renderHistory(data.items||[], q);
-    }
+    // The search function is no longer needed as it's not used in the new HTML.
+    // async function search(offset=0) {
+    //   state.offset = Math.max(0, offset);
+    //   const params = new URLSearchParams();
+    //   params.set('limit', String(state.limit));
+    //   params.set('offset', String(state.offset));
+    //   const q = $('q').value.trim(); if (q) params.set('q', q);
+    //   const lv = $('levelFilter').value; if (lv) params.set('level', lv);
+    //   const tf = $('timeFrom').value.trim(); if (tf) params.set('time_from', tf);
+    //   const tt = $('timeTo').value.trim(); if (tt) params.set('time_to', tt);
+    //   const res = await fetch('/api/logs?' + params.toString());
+    //   const data = await res.json();
+    //   state.total = data.total || 0;
+    //   $('total').textContent = `共 ${state.total} 条`;
+    //   renderHistory(data.items||[], q);
+    // }
 
-    $('search').onclick = () => search(0);
-    $('prev').onclick = () => { const off = state.offset - state.limit; if (off >= 0) search(off); };
-    $('next').onclick = () => { const off = state.offset + state.limit; if (off < state.total) search(off); };
-    $('q').addEventListener('keydown', (e)=>{ if (e.key==='Enter') search(0); });
+    // The search button is removed from the new HTML, so this line is no longer needed.
+    // $('search').onclick = () => search(0);
+    // The prev button is removed from the new HTML, so this line is no longer needed.
+    // $('prev').onclick = () => { const off = state.offset - state.limit; if (off >= 0) search(off); };
+    // The next button is removed from the new HTML, so this line is no longer needed.
+    // $('next').onclick = () => { const off = state.offset + state.limit; if (off < state.total) search(off); };
+    // The q input is removed from the new HTML, so this line is no longer needed.
+    // $('q').addEventListener('keydown', (e)=>{ if (e.key==='Enter') search(0); });
 
-    $('saveSecret').onclick = async () => {
-      const secret = $('controlSecret').value.trim();
-      if (secret.length < 6) { alert('口令至少6位'); return; }
-      const res = await fetch('/api/device/secret', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret }) });
-      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('保存失败：' + (err.error||res.status)); return; }
-      alert('已保存');
-    };
+    // The saveSecret button is removed from the new HTML, so this line is no longer needed.
+    // $('saveSecret').onclick = async () => {
+    //   const secret = $('controlSecret').value.trim();
+    //   if (secret.length < 6) { alert('口令至少6位'); return; }
+    //   const res = await fetch('/api/device/secret', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ secret }) });
+    //   if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('保存失败：' + (err.error||res.status)); return; }
+    //   alert('已保存');
+    // };
 
-    $('sendCmd').onclick = async () => {
-      const token = $('controlSecret').value.trim();
-      const data = $('cmd').value;
-      if (!state.device_code) { alert('设备码未知'); return; }
-      if (!token) { alert('请先填写控制口令'); return; }
-      if (!data) { alert('请输入命令内容'); return; }
-      const res = await fetch('/api/control/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: state.device_code, token, data, append_newline: $('appendNl').checked }) });
-      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('发送失败：' + (err.error||res.status)); return; }
-      $('cmd').value = '';
-    };
+    // The sendCmd button is removed from the new HTML, so this line is no longer needed.
+    // $('sendCmd').onclick = async () => {
+    //   const token = $('controlSecret').value.trim();
+    //   const data = $('cmd').value;
+    //   if (!state.device_code) { alert('设备码未知'); return; }
+    //   if (!token) { alert('请先填写控制口令'); return; }
+    //   if (!data) { alert('请输入命令内容'); return; }
+    //   const res = await fetch('/api/control/send', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ device_code: state.device_code, token, data, append_newline: $('appendNl').checked }) });
+    //   if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('发送失败：' + (err.error||res.status)); return; }
+    //   $('cmd').value = '';
+    // };
 
+    // The loadDevice function is now called directly.
     loadDevice();
     loadConfig();
   </script>
