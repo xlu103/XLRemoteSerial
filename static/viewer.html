@@ -14,12 +14,16 @@
 </head>
 <body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
   <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex gap-3 items-center flex-wrap">
-    <h1 class="text-base font-semibold">Viewer</h1>
-    <input id="code" placeholder="输入设备码" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 w-44" />
-    <button id="connect" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">连接</button>
-    <a href="/portal.html" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">入口页</a>
-    <button id="toggleTheme" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">夜间模式</button>
-    <span id="status" class="text-slate-500">未连接</span>
+    <h1 class="text-base font-semibold">远程串口查看器</h1>
+    <div class="flex items-center gap-2">
+      <input id="code" placeholder="输入8位设备码" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 w-48 text-center font-mono text-lg tracking-wider" maxlength="8" />
+      <button id="connect" class="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium">连接设备</button>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">返回首页</a>
+      <button id="toggleTheme" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">🌙</button>
+    </div>
+    <span id="status" class="px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">未连接</span>
   </header>
   <div class="p-4 grid gap-3">
     <div class="flex gap-2 items-center">
@@ -68,12 +72,47 @@
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws/view/${encodeURIComponent(code)}`);
       state.ws = ws; state.code = code;
-      $('status').textContent = '连接中...';
-      ws.onopen = () => $('status').textContent = '已连接';
-      ws.onclose = () => $('status').textContent = '未连接';
-      ws.onerror = () => $('status').textContent = '连接错误';
+      
+      updateStatus('连接中...', 'connecting');
+      
+      ws.onopen = () => {
+        updateStatus('已连接', 'connected');
+        appendLine(`[系统] 已连接到设备 ${code}`);
+      };
+      
+      ws.onclose = () => {
+        updateStatus('未连接', 'disconnected');
+        appendLine('[系统] 连接已断开');
+      };
+      
+      ws.onerror = () => {
+        updateStatus('连接错误', 'error');
+        appendLine('[系统] 连接发生错误');
+      };
+      
       ws.onmessage = (ev) => { appendLine(ev.data); };
       setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
+    }
+
+    function updateStatus(text, type) {
+      const status = $('status');
+      status.textContent = text;
+      status.className = `px-3 py-2 rounded-md font-medium `;
+      
+      switch(type) {
+        case 'connecting':
+          status.className += 'bg-yellow-100 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300';
+          break;
+        case 'connected':
+          status.className += 'bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300';
+          break;
+        case 'disconnected':
+          status.className += 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+          break;
+        case 'error':
+          status.className += 'bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-300';
+          break;
+      }
     }
 
     function appendLine(text) {
@@ -84,9 +123,29 @@
       if (state.autoScroll) $('logs').scrollTop = $('logs').scrollHeight;
     }
 
+    // 设备码输入验证和自动连接
+    $('code').oninput = (e) => {
+      const code = e.target.value.trim().toUpperCase();
+      e.target.value = code;
+      
+      // 自动连接（当输入8位设备码时）
+      if (code.length === 8) {
+        setTimeout(() => connectWS(code), 500);
+      }
+    };
+
     $('connect').onclick = () => {
       const code = $('code').value.trim();
-      if (!code) { alert('请输入设备码'); return; }
+      if (!code) { 
+        alert('请输入设备码'); 
+        $('code').focus();
+        return; 
+      }
+      if (code.length !== 8) {
+        alert('设备码必须是8位字符');
+        $('code').focus();
+        return;
+      }
       connectWS(code);
     };
 

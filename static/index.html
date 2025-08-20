@@ -6,6 +6,8 @@
   <title>XLRemoteSerial - Lite</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwind.config = { darkMode: 'class' };</script>
+  <link rel="stylesheet" href="/static/js/serial.css">
+  <script src="/static/js/serial.js"></script>
   <style>
     :root { --bg: #ffffff; --fg: #1f2328; --muted: #6a737d; --accent: #1677ff; --warn: #ff9800; --error: #e91e63; --card:#f6f8fa; }
     .dark { --bg: #0b0f14; --fg: #e5e7eb; --muted: #9aa4b2; --accent: #4e9bff; --warn: #ffb24a; --error: #ff6b8a; --card:#111827; }
@@ -40,11 +42,25 @@
   <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800">
     <h1 class="text-base font-semibold">XLRemoteSerial</h1>
     <div class="row">
-      <span id="deviceCode" class="badge">--------</span>
-      <button id="copyCode" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">复制设备码</button>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-slate-600 dark:text-slate-400">设备码:</span>
+        <span id="deviceCode" class="badge font-mono text-lg tracking-wider bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">--------</span>
+        <button id="copyCode" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">复制</button>
+      </div>
     </div>
     <div class="row">
-      <input id="port" placeholder="串口号，例如 COM3" style="width: 160px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+      <button id="connectBtn" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">连接串口</button>
+      <button id="disconnectBtn" class="px-3 py-1.5 rounded-md bg-red-600 hover:bg-red-500 text-white" style="display: none;">断开连接</button>
+      <div class="flex items-center gap-2">
+        <span class="text-sm text-slate-600 dark:text-slate-400">状态:</span>
+        <span id="connectionStatus" class="px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium">未连接</span>
+      </div>
+      <button id="toggleTheme" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">夜间模式</button>
+      <button id="toggleDebug" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">调试模式</button>
+    </div>
+    
+    <!-- 串口配置面板 -->
+    <div id="configPanel" class="row" style="display: none;">
       <input id="baudrate" type="number" value="115200" style="width: 110px" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
       <select id="bytesize" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
         <option value="8" selected>8</option>
@@ -55,12 +71,11 @@
         <option value="2">2</option>
       </select>
       <select id="parity" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700">
-        <option value="N" selected>N</option>
-        <option value="E">E</option>
-        <option value="O">O</option>
+        <option value="none" selected>无</option>
+        <option value="even">偶校验</option>
+        <option value="odd">奇校验</option>
       </select>
-      <button id="save" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">保存并连接</button>
-      <button id="toggleTheme" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">夜间模式</button>
+      <button id="applyConfig" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white">应用配置</button>
     </div>
   </header>
   <main>
@@ -97,6 +112,22 @@
       <div id="history" class="history-list"></div>
     </div>
 
+    <!-- 控制命令输入区域 -->
+    <div class="card shadow-sm">
+      <div class="row" style="gap:12px; align-items: center;">
+        <strong>控制命令</strong>
+        <input id="commandInput" placeholder="输入控制命令" style="min-width: 220px; flex: 1;" class="px-2 py-1 rounded-md border-slate-300 dark:border-slate-700" />
+        <button id="sendCommand" class="px-3 py-1.5 rounded-md bg-green-600 hover:bg-green-500 text-white">发送</button>
+        <button id="clearCommand" class="secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800">清空</button>
+      </div>
+      <div class="row" style="margin-top: 8px;">
+        <label class="flex items-center gap-2">
+          <input type="checkbox" id="appendNewline" checked class="rounded">
+          <span class="text-sm">自动添加换行符</span>
+        </label>
+      </div>
+    </div>
+
     <div class="card shadow-sm">
       <div class="row" style="gap:12px; align-items: center;">
         <strong>控制台</strong>
@@ -120,6 +151,11 @@
   <script>
     const $ = (id) => document.getElementById(id);
     const state = { ws: null, paused: false, autoScroll: true, offset: 0, limit: 100, total: 0, device_code: '' };
+    
+    // 检查浏览器是否支持Web Serial API
+    if (!window.serialManager || !window.serialManager.isSupported()) {
+        alert('您的浏览器不支持Web Serial API，请使用Chrome 89+或Edge 89+版本');
+    }
 
     function applyTheme() {
       const isDark = localStorage.getItem('theme') === 'dark';
@@ -135,19 +171,190 @@
           $('deviceCode').textContent = data.device_code;
           state.device_code = data.device_code;
         }
-      } catch {}
+      } catch (error) {
+        console.error('加载设备信息失败:', error);
+        // 如果没有设备，显示默认值
+        $('deviceCode').textContent = '--------';
+      }
+    }
+
+    // 为新的串口连接创建设备
+    async function createDeviceForPort(portName) {
+      try {
+        const response = await fetch('/api/device/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            port_name: portName
+          })
+        });
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.ok && result.device) {
+            // 更新设备码显示
+            $('deviceCode').textContent = result.device.device_code;
+            state.device_code = result.device.device_code;
+            
+            // 显示成功消息
+            appendLine(`[系统] 新设备已创建，设备码: ${result.device.device_code}`, 'info');
+            return result.device.device_code;
+          }
+        }
+        throw new Error('创建设备失败');
+      } catch (error) {
+        console.error('创建设备失败:', error);
+        alert('创建设备失败: ' + error.message);
+        return null;
+      }
     }
 
     async function loadConfig() {
       try {
         const res = await fetch('/api/config');
         const cfg = await res.json();
-        $('port').value = cfg.port || '';
         $('baudrate').value = cfg.baudrate ?? 115200;
         $('bytesize').value = cfg.bytesize ?? 8;
         $('stopbits').value = cfg.stopbits ?? 1;
-        $('parity').value = cfg.parity ?? 'N';
+        $('parity').value = cfg.parity ?? 'none';
       } catch {}
+    }
+
+    // 串口连接功能
+    async function connectSerial() {
+        try {
+            const options = {
+                baudrate: parseInt($('baudrate').value),
+                bytesize: parseInt($('bytesize').value),
+                stopbits: parseFloat($('stopbits').value),
+                parity: $('parity').value
+            };
+            
+            // 先连接串口
+            await window.serialManager.connect(options);
+            
+            // 获取串口信息用于创建设备
+            const portInfo = window.serialManager.getPortInfo();
+            const portName = portInfo ? portInfo.usbProductId || portInfo.usbVendorId || 'Unknown' : 'Unknown';
+            
+            // 为新的串口连接创建设备
+            const deviceCode = await createDeviceForPort(portName);
+            if (!deviceCode) {
+                throw new Error('创建设备失败');
+            }
+            
+            // 设置数据接收回调
+            window.serialManager.setDataCallback(async (data) => {
+                // 数据完整性检查
+                if (data && typeof data === 'string' && data.trim()) {
+                    appendLine(data, 'info');
+                    
+                    // 发送数据到后端API，供远程查看者接收
+                    try {
+                        await window.serialManager.sendDataToBackend(deviceCode, data);
+                    } catch (error) {
+                        console.error('发送数据到后端失败:', error);
+                    }
+                }
+            });
+            
+            // 设置连接状态回调
+            window.serialManager.setConnectionCallback((connected) => {
+                updateConnectionUI(connected);
+            });
+            
+            updateConnectionUI(true);
+            $('configPanel').style.display = 'flex';
+            
+            // 显示连接成功消息
+            appendLine(`[系统] 串口连接成功，设备码: ${deviceCode}`, 'info');
+            
+        } catch (error) {
+            console.error('连接失败:', error);
+            alert('连接失败: ' + error.message);
+        }
+    }
+
+    // 断开串口连接
+    async function disconnectSerial() {
+        try {
+            await window.serialManager.disconnect();
+            updateConnectionUI(false);
+            $('configPanel').style.display = 'none';
+        } catch (error) {
+            console.error('断开连接失败:', error);
+        }
+    }
+
+    // 更新连接状态UI
+    function updateConnectionUI(connected) {
+        if (connected) {
+            $('connectBtn').style.display = 'none';
+            $('disconnectBtn').style.display = 'inline-block';
+            $('connectionStatus').textContent = '已连接';
+            $('connectionStatus').className = 'px-3 py-1.5 rounded-md bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300';
+        } else {
+            $('connectBtn').style.display = 'inline-block';
+            $('disconnectBtn').style.display = 'none';
+            $('connectionStatus').textContent = '未连接';
+            $('connectionStatus').className = 'px-3 py-1.5 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+        }
+    }
+
+    // 发送控制命令
+    async function sendCommand() {
+        const command = $('commandInput').value.trim();
+        if (!command) return;
+        
+        // 检查是否有设备码
+        if (!state.device_code || state.device_code === '--------') {
+            alert('请先连接串口设备');
+            return;
+        }
+        
+        try {
+            const appendNewline = $('appendNewline').checked;
+            const commandToSend = appendNewline ? command + '\n' : command;
+            
+            // 发送到串口设备
+            await window.serialManager.writeData(commandToSend);
+            
+            // 显示发送的命令
+            appendLine(`> ${command}`, 'warn');
+            
+            // 同时发送到后端API，供远程查看者接收
+            try {
+                await window.serialManager.sendDataToBackend(state.device_code, `[SENT] ${command}`);
+            } catch (error) {
+                console.error('发送命令到后端失败:', error);
+            }
+            
+            // 清空输入框
+            $('commandInput').value = '';
+            
+        } catch (error) {
+            console.error('发送命令失败:', error);
+            alert('发送命令失败: ' + error.message);
+        }
+    }
+
+    // 应用串口配置
+    async function applySerialConfig() {
+        if (!window.serialManager.isConnected) {
+            alert('请先连接串口');
+            return;
+        }
+        
+        try {
+            await window.serialManager.disconnect();
+            await connectSerial();
+            alert('配置已应用');
+        } catch (error) {
+            console.error('应用配置失败:', error);
+            alert('应用配置失败: ' + error.message);
+        }
     }
 
     function connectWS() {
@@ -169,13 +376,79 @@
     function appendLine(text, level='info') {
       const el = document.createElement('div');
       el.className = `log-line ${level}`;
-      el.textContent = text;
+      
+      // 添加时间戳
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString();
+      
+      // 格式化显示内容
+      if (text.startsWith('[系统]') || text.startsWith('[SENT]') || text.startsWith('[CONTROL]') || text.startsWith('[调试]')) {
+        // 系统消息和命令使用特殊格式
+        el.innerHTML = `<span class="text-gray-500 text-xs">${timestamp}</span> <span class="font-medium">${text}</span>`;
+      } else {
+        // 普通数据 - 检查是否可能是不完整的数据
+        const isIncomplete = text.length < 10 && !text.includes(' ') && !text.includes('\t');
+        const dataClass = isIncomplete ? 'text-orange-600 dark:text-orange-400' : '';
+        el.innerHTML = `<span class="text-gray-500 text-xs">${timestamp}</span> <span class="${dataClass}">${text}</span>`;
+        
+        // 如果检测到可能不完整的数据，添加提示
+        if (isIncomplete && window.serialManager && window.serialManager.debugMode) {
+          console.warn(`可能不完整的数据: "${text}" (长度: ${text.length})`);
+        }
+      }
+      
       $('logs').appendChild(el);
+      
+      // 自动滚动到底部
       if (state.autoScroll) {
         $('logs').scrollTop = $('logs').scrollHeight;
       }
+      
+      // 限制日志条数，防止内存占用过多
+      const maxLines = 1000;
+      while ($('logs').children.length > maxLines) {
+        $('logs').removeChild($('logs').firstChild);
+      }
     }
 
+    // 串口连接相关事件
+    $('connectBtn').onclick = connectSerial;
+    $('disconnectBtn').onclick = disconnectSerial;
+    $('applyConfig').onclick = applySerialConfig;
+    
+    // 控制命令相关事件
+    $('sendCommand').onclick = sendCommand;
+    $('clearCommand').onclick = () => { $('commandInput').value = ''; };
+    
+    // 回车键发送命令
+    $('commandInput').onkeypress = (e) => {
+      if (e.key === 'Enter') {
+        sendCommand();
+      }
+    };
+
+    // 调试模式切换
+    $('toggleDebug').onclick = () => {
+      if (window.serialManager) {
+        const currentDebug = window.serialManager.debugMode;
+        window.serialManager.setDebugMode(!currentDebug);
+        
+        // 更新按钮状态
+        $('toggleDebug').textContent = !currentDebug ? '关闭调试' : '调试模式';
+        $('toggleDebug').className = !currentDebug ? 
+          'secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800 bg-yellow-100 dark:bg-yellow-800' :
+          'secondary px-3 py-1.5 rounded-md hover:bg-slate-50 dark:hover:bg-slate-800';
+        
+        // 显示调试信息
+        if (!currentDebug) {
+          const stats = window.serialManager.getBufferStats();
+          appendLine(`[调试] 调试模式已开启，缓冲区统计: ${JSON.stringify(stats)}`, 'info');
+        } else {
+          appendLine('[调试] 调试模式已关闭', 'info');
+        }
+      }
+    };
+    
     $('copyCode').onclick = async () => {
       const code = $('deviceCode').textContent.trim();
       try { await navigator.clipboard.writeText(code); alert('已复制设备码：' + code); } catch { alert('复制失败'); }
