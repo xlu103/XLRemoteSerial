@@ -1,64 +1,197 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>XLRemoteSerial - Viewer</title>
+  <title>SerialFlow - 远程查看器</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwind.config = { darkMode: 'class' };</script>
-  <style>
-    :root { --card:#f6f8fa; }
-    .dark { --card:#111827; }
-    .log-line { white-space: pre-wrap; word-break: break-word; }
-  </style>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              200: '#bae6fd',
+              300: '#7dd3fc',
+              400: '#38bdf8',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              800: '#075985',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    };
+  </script>
 </head>
-<body class="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-  <header class="bg-white/60 dark:bg-slate-900/60 backdrop-blur border-b border-slate-200 dark:border-slate-800 px-4 py-3 flex gap-3 items-center flex-wrap">
-    <h1 class="text-base font-semibold">远程串口查看器</h1>
-    <div class="flex items-center gap-2">
-      <input id="code" placeholder="输入8位设备码" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 w-48 text-center font-mono text-lg tracking-wider" maxlength="8" />
-      <button id="connect" class="px-4 py-2 rounded-md bg-blue-600 hover:bg-blue-500 text-white font-medium">连接设备</button>
-    </div>
-    <div class="flex items-center gap-2">
-      <a href="/" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">返回首页</a>
-      <button id="toggleTheme" class="px-3 py-2 rounded-md border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800">🌙</button>
-    </div>
-    <span id="status" class="px-3 py-2 rounded-md bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300">未连接</span>
-  </header>
-  <div class="p-4 grid gap-3">
-    <div class="flex gap-2 items-center">
-      <input id="q" placeholder="关键字（空格分词）" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 min-w-[220px] w-2/5" />
-      <button id="search" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">搜索历史</button>
-      <span id="total" class="text-slate-500">共 0 条</span>
-    </div>
-
-    <div class="rounded-md border border-slate-200 dark:border-slate-800 p-3">
-      <div class="flex flex-wrap gap-3 items-center">
-        <strong>控制台</strong>
-        <input id="token" placeholder="控制口令" class="px-2 py-1 rounded-md border border-slate-300 dark:border-slate-700 w-64" />
-        <label class="text-sm text-slate-600 dark:text-slate-300"><input type="checkbox" id="appendNl" checked class="mr-1" /> 追加换行</label>
-        <button id="saveToken" class="px-3 py-1.5 rounded-md border border-slate-300 dark:border-slate-700">保存口令</button>
-      </div>
-      <div class="mt-2">
-        <textarea id="cmd" placeholder="输入要发送的命令" class="w-full min-h-[80px] rounded-md border border-slate-300 dark:border-slate-700 p-2"></textarea>
-      </div>
-      <div class="mt-2 flex justify-between items-center">
-        <div class="text-slate-500 text-sm">提示：需要先在设备侧设置控制口令。</div>
-        <div>
-          <button id="sendCmd" class="px-3 py-1.5 rounded-md bg-blue-600 hover:bg-blue-500 text-white">发送</button>
+<body class="bg-gray-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 min-h-screen">
+  <!-- 顶部导航栏 -->
+  <nav class="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex justify-between h-16">
+        <div class="flex items-center">
+          <div class="flex-shrink-0 flex items-center">
+            <svg class="h-8 w-8 text-primary-600" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
+            </svg>
+            <span class="ml-2 text-xl font-semibold">SerialFlow 远程查看器</span>
+          </div>
+        </div>
+        <div class="flex items-center space-x-4">
+          <a href="/" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+            </svg>
+          </a>
+          <button id="toggleTheme" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+            </svg>
+          </button>
         </div>
       </div>
     </div>
+  </nav>
 
-    <div id="logs" class="h-[calc(100vh-240px)] overflow-auto rounded-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-3 font-mono text-sm"></div>
+  <!-- 主要内容区域 -->
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div class="grid grid-cols-12 gap-6">
+      <!-- 左侧面板 - 设备连接 -->
+      <div class="col-span-12 lg:col-span-3">
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+          <h2 class="text-lg font-medium mb-4">设备连接</h2>
+          
+          <!-- 设备码输入 -->
+          <div class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">设备码</label>
+              <input id="code" type="text" maxlength="8" placeholder="输入8位设备码" 
+                class="w-full px-3 py-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700 font-mono text-lg tracking-wider text-center uppercase" />
+            </div>
+            <button id="connect" class="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+              连接设备
+            </button>
+          </div>
+
+          <!-- 连接状态 -->
+          <div class="mt-4">
+            <div class="flex items-center space-x-2">
+              <span class="text-sm text-gray-500 dark:text-gray-400">状态:</span>
+              <span id="status" class="text-sm font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-slate-700">
+                未连接
+              </span>
+            </div>
+          </div>
+
+          <!-- 控制命令设置 -->
+          <div class="mt-6 space-y-4">
+            <h3 class="text-sm font-medium text-gray-700 dark:text-gray-300">控制设置</h3>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">控制口令</label>
+              <input id="token" type="password" placeholder="输入控制口令" 
+                class="w-full px-3 py-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700" />
+            </div>
+            <div class="flex items-center justify-between">
+              <label class="flex items-center space-x-2">
+                <input type="checkbox" id="appendNl" checked class="rounded border-gray-300 dark:border-slate-600">
+                <span class="text-sm text-gray-700 dark:text-gray-300">自动换行</span>
+              </label>
+              <button id="saveToken" class="text-sm text-primary-600 hover:text-primary-500">
+                保存口令
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧面板 - 数据显示和控制 -->
+      <div class="col-span-12 lg:col-span-9 space-y-6">
+        <!-- 数据统计卡片 -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">连接状态</h3>
+            <div class="mt-2 flex items-center">
+              <div class="flex-shrink-0">
+                <div id="connectionIcon" class="h-4 w-4 rounded-full bg-gray-400"></div>
+              </div>
+              <div class="ml-3">
+                <div class="text-lg font-semibold" id="connectionText">未连接</div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">消息数量</h3>
+            <div class="mt-2">
+              <div class="text-lg font-semibold" id="messageCount">0</div>
+            </div>
+          </div>
+          <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+            <h3 class="text-sm font-medium text-gray-500 dark:text-gray-400">历史记录</h3>
+            <div class="mt-2">
+              <div class="text-lg font-semibold" id="total">0 条</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 数据控制台 -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+          <div class="p-4 border-b border-gray-200 dark:border-slate-700">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-4">
+                <h2 class="text-lg font-medium">数据控制台</h2>
+                <div class="flex items-center space-x-2">
+                  <input type="text" id="q" placeholder="搜索关键词" 
+                    class="px-3 py-1.5 text-sm rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                  <button id="search" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                    搜索
+                  </button>
+                </div>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button id="clear" class="px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-md">
+                  清空
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="logs" class="h-96 overflow-auto p-4 font-mono text-sm"></div>
+        </div>
+
+        <!-- 命令输入区域 -->
+        <div class="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-6">
+          <h2 class="text-lg font-medium mb-4">发送命令</h2>
+          <div class="space-y-4">
+            <textarea id="cmd" rows="3" placeholder="输入要发送的命令" 
+              class="w-full px-3 py-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700"></textarea>
+            <div class="flex justify-end">
+              <button id="sendCmd" class="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700">
+                发送
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
+
   <script>
     const $ = (id) => document.getElementById(id);
-    const state = { ws: null, code: '', paused: false, autoScroll: true };
+    const state = { 
+      ws: null, 
+      code: '', 
+      paused: false, 
+      autoScroll: true,
+      messageCount: 0
+    };
 
     function applyTheme() {
       const isDark = localStorage.getItem('theme') === 'dark';
-      document.body.classList.toggle('dark', isDark);
+      document.documentElement.classList.toggle('dark', isDark);
     }
     applyTheme();
 
@@ -67,58 +200,85 @@
       if (t) $('token').value = t;
     }
 
-    function connectWS(code) {
-      try { if (state.ws) state.ws.close(); } catch {}
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-      const ws = new WebSocket(`${proto}://${location.host}/ws/view/${encodeURIComponent(code)}`);
-      state.ws = ws; state.code = code;
-      
-      updateStatus('连接中...', 'connecting');
-      
-      ws.onopen = () => {
-        updateStatus('已连接', 'connected');
-        appendLine(`[系统] 已连接到设备 ${code}`);
-      };
-      
-      ws.onclose = () => {
-        updateStatus('未连接', 'disconnected');
-        appendLine('[系统] 连接已断开');
-      };
-      
-      ws.onerror = () => {
-        updateStatus('连接错误', 'error');
-        appendLine('[系统] 连接发生错误');
-      };
-      
-      ws.onmessage = (ev) => { appendLine(ev.data); };
-      setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
-    }
-
-    function updateStatus(text, type) {
+    function updateConnectionUI(type) {
+      const icon = $('connectionIcon');
+      const text = $('connectionText');
       const status = $('status');
-      status.textContent = text;
-      status.className = `px-3 py-2 rounded-md font-medium `;
-      
+
       switch(type) {
         case 'connecting':
-          status.className += 'bg-yellow-100 dark:bg-yellow-800 text-yellow-700 dark:text-yellow-300';
+          icon.className = 'h-4 w-4 rounded-full bg-yellow-500';
+          text.textContent = '连接中';
+          status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-yellow-100 dark:bg-yellow-800 text-yellow-800 dark:text-yellow-200';
+          status.textContent = '连接中...';
           break;
         case 'connected':
-          status.className += 'bg-green-100 dark:bg-green-800 text-green-700 dark:text-green-300';
+          icon.className = 'h-4 w-4 rounded-full bg-green-500';
+          text.textContent = '已连接';
+          status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200';
+          status.textContent = '已连接';
           break;
         case 'disconnected':
-          status.className += 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300';
+          icon.className = 'h-4 w-4 rounded-full bg-gray-400';
+          text.textContent = '未连接';
+          status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-gray-100 dark:bg-slate-700';
+          status.textContent = '未连接';
           break;
         case 'error':
-          status.className += 'bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-300';
+          icon.className = 'h-4 w-4 rounded-full bg-red-500';
+          text.textContent = '连接错误';
+          status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-200';
+          status.textContent = '连接错误';
           break;
       }
     }
 
+    function connectWS(code) {
+      try { if (state.ws) state.ws.close(); } catch {}
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+      const ws = new WebSocket(`${proto}://${location.host}/ws/view/${encodeURIComponent(code)}`);
+      state.ws = ws; 
+      state.code = code;
+      
+      updateConnectionUI('connecting');
+      
+      ws.onopen = () => {
+        updateConnectionUI('connected');
+        appendLine(`[系统] 已连接到设备 ${code}`);
+      };
+      
+      ws.onclose = () => {
+        updateConnectionUI('disconnected');
+        appendLine('[系统] 连接已断开');
+      };
+      
+      ws.onerror = () => {
+        updateConnectionUI('error');
+        appendLine('[系统] 连接发生错误');
+      };
+      
+      ws.onmessage = (ev) => { 
+        appendLine(ev.data);
+        state.messageCount++;
+        $('messageCount').textContent = state.messageCount;
+      };
+      
+      setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
+    }
+
     function appendLine(text) {
       const el = document.createElement('div');
-      el.className = 'log-line';
-      el.textContent = text;
+      el.className = 'mb-1';
+      
+      const now = new Date();
+      const timestamp = now.toLocaleTimeString();
+      
+      if (text.startsWith('[系统]')) {
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium text-primary-600 dark:text-primary-400">${text}</span>`;
+      } else {
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> ${text}`;
+      }
+      
       $('logs').appendChild(el);
       if (state.autoScroll) $('logs').scrollTop = $('logs').scrollHeight;
     }
@@ -128,7 +288,6 @@
       const code = e.target.value.trim().toUpperCase();
       e.target.value = code;
       
-      // 自动连接（当输入8位设备码时）
       if (code.length === 8) {
         setTimeout(() => connectWS(code), 500);
       }
@@ -155,6 +314,13 @@
       applyTheme();
     };
 
+    $('clear').onclick = () => {
+      if (!confirm('确认清空当前页面日志展示？')) return;
+      $('logs').innerHTML = '';
+      state.messageCount = 0;
+      $('messageCount').textContent = '0';
+    };
+
     $('search').onclick = async () => {
       const code = state.code || $('code').value.trim();
       if (!code) { alert('请输入设备码'); return; }
@@ -166,10 +332,14 @@
       if (q) params.set('q', q);
       const res = await fetch('/api/logs?' + params.toString());
       const data = await res.json();
-      $('total').textContent = `共 ${data.total||0} 条`;
+      $('total').textContent = `${data.total||0} 条`;
       $('logs').innerHTML = '';
+      state.messageCount = 0;
+      $('messageCount').textContent = '0';
       for (const it of (data.items || [])) {
         appendLine(it.ts + ' ' + it.content);
+        state.messageCount++;
+        $('messageCount').textContent = state.messageCount;
       }
     };
 
@@ -191,8 +361,13 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ device_code: code, token, data, append_newline: $('appendNl').checked })
       });
-      if (!res.ok) { const err = await res.json().catch(()=>({error:'未知错误'})); alert('发送失败：' + (err.error||res.status)); return; }
+      if (!res.ok) { 
+        const err = await res.json().catch(()=>({error:'未知错误'})); 
+        alert('发送失败：' + (err.error||res.status)); 
+        return; 
+      }
       $('cmd').value = '';
+      appendLine(`[系统] 命令已发送`);
     };
 
     loadSavedToken();
