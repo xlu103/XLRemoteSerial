@@ -158,9 +158,26 @@ def ensure_device() -> Dict[str, Any]:
 		code = _generate_device_code(8)
 		created_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
 		cur = conn.execute("INSERT INTO device (device_code, created_at) VALUES (?, ?)", (code, created_at))
-		conn.commit()
 		dev_id = cur.lastrowid
+		conn.commit()
+
 		return {"id": dev_id, "device_code": code, "created_at": created_at, "has_control_secret": False}
+
+def get_device_by_code(device_code: str) -> Optional[Dict[str, Any]]:
+    """根据设备码获取设备信息"""
+    with db_conn() as conn:
+        row = conn.execute(
+            "SELECT id, device_code, created_at, control_secret FROM device WHERE device_code = ?", 
+            (device_code,)
+        ).fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "device_code": row[1],
+                "created_at": row[2],
+                "has_control_secret": bool(row[3])
+            }
+    return None
 
 def create_device_for_connection(port_name: str) -> Dict[str, Any]:
 	"""为新的串口连接创建设备"""
@@ -330,50 +347,75 @@ def _is_local_request(req: Request) -> bool:
 
 @app.post("/api/device/secret")
 async def set_device_secret(req: Request):
-	if not _is_local_request(req):
-		return JSONResponse(status_code=403, content={"error": "forbidden"})
-	body = await req.json()
-	secret = str(body.get("secret", "")).strip()
-	if not secret or len(secret) < 6:
-		return JSONResponse(status_code=400, content={"error": "secret too short"})
-	with db_conn() as conn:
-		conn.execute("UPDATE device SET control_secret = ? WHERE id = ?", (secret, int(app.state.device["id"])) )
-		conn.commit()
-	app.state.device["has_control_secret"] = True
-	return {"ok": True}
+    body = await req.json()
+    device_code = str(body.get("device_code", "")).strip()
+    secret = str(body.get("secret", "")).strip()
+    
+    if not device_code:
+        return JSONResponse(status_code=400, content={"error": "missing device_code"})
+    if not secret or len(secret) < 6:
+        return JSONResponse(status_code=400, content={"error": "secret too short"})
+    
+    # 检查设备是否存在
+    device = get_device_by_code(device_code)
+    if not device:
+        return JSONResponse(status_code=404, content={"error": "device not found"})
+    
+    with db_conn() as conn:
+        conn.execute("UPDATE device SET control_secret = ? WHERE device_code = ?", (secret, device_code))
+        conn.commit()
+    
+    # 如果是当前设备，更新状态
+    if device_code == app.state.device.get("device_code"):
+        app.state.device["has_control_secret"] = True
+    
+    return {"ok": True}
 
 
 @app.post("/api/control/send")
 async def control_send(req: Request):
-	"""远程控制命令发送API - 现在通过Web端转发"""
-	body = await req.json()
-	code = str(body.get("device_code", "")).strip()
-	token = str(body.get("token", "")).strip()
-	data = str(body.get("data", ""))
-	append_newline = bool(body.get("append_newline", True))
-	if not code or not token or not data:
-		return JSONResponse(status_code=400, content={"error": "missing fields"})
-	if code != app.state.device.get("device_code"):
-		return JSONResponse(status_code=404, content={"error": "device not found"})
-	with db_conn() as conn:
-		row = conn.execute("SELECT control_secret FROM device WHERE device_code = ?", (code,)).fetchone()
-		if not row or not row[0] or row[0] != token:
-			return JSONResponse(status_code=403, content={"error": "invalid token"})
-	
-	# 记录控制命令到日志
-	ip = (req.client.host or "unknown")
-	now = time.time()
-	lst = _rate_limit_cache.setdefault(ip, [])
-	lst[:] = [t for t in lst if now - t < 2.0]
-	if len(lst) >= 10:
-		return JSONResponse(status_code=429, content={"error": "rate limited"})
-	lst.append(now)
-	
-	# 通过WebSocket广播控制命令到Web端
-	control_message = f"[CONTROL] {data}"
-	_enqueue_line_for_device(code, control_message)
-	
-	return {"ok": True, "message": "控制命令已发送到Web端"}
+    """远程控制命令发送API - 现在通过Web端转发"""
+    body = await req.json()
+    code = str(body.get("device_code", "")).strip()
+    token = str(body.get("token", "")).strip()
+    data = str(body.get("data", ""))
+    append_newline = bool(body.get("append_newline", True))
+    
+    if not code or not token or not data:
+        return JSONResponse(status_code=400, content={"error": "missing fields"})
+    
+    # 检查设备是否存在
+    device = get_device_by_code(code)
+    if not device:
+        return JSONResponse(status_code=404, content={"error": "device not found"})
+    
+    # 验证控制密钥
+    with db_conn() as conn:
+        row = conn.execute("SELECT control_secret FROM device WHERE device_code = ?", (code,)).fetchone()
+        if not row or not row[0] or row[0] != token:
+            return JSONResponse(status_code=403, content={"error": "invalid token"})
+		
+    if data == '_[][]':
+        return {"ok": True, "message": "认证密钥指令已接收"}
+		
+    # 记录控制命令到日志
+    ip = (req.client.host or "unknown")
+    now = time.time()
+    lst = _rate_limit_cache.setdefault(ip, [])
+    lst[:] = [t for t in lst if now - t < 2.0]
+    if len(lst) >= 10:
+        return JSONResponse(status_code=429, content={"error": "rate limited"})
+    lst.append(now)
+    
+    # 如果需要自动添加换行符
+    if append_newline and not data.endswith('\n'):
+        data = data + '\n'
+    
+    # 通过WebSocket广播控制命令到Web端
+    control_message = f"[CONTROL] {data}"
+    _enqueue_line_for_device(code, control_message)
+    
+    return {"ok": True, "message": "控制命令已发送到Web端"}
 
 @app.post("/api/serial/data")
 async def receive_serial_data(req: Request):

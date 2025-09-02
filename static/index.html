@@ -113,6 +113,18 @@
                 <option value="odd">奇校验</option>
               </select>
             </div>
+            <!-- 添加控制口令设置 -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">控制口令</label>
+              <div class="flex space-x-2">
+                <input type="password" id="controlSecret" placeholder="设置控制口令（至少6位）" 
+                  class="flex-1 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700">
+                <button id="saveSecret" class="px-3 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 text-sm">
+                  保存
+                </button>
+              </div>
+              <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">设置后远程查看端需要使用此口令才能发送控制命令</p>
+            </div>
           </div>
 
           <!-- 连接按钮 -->
@@ -331,9 +343,12 @@
         $('currentBaudrate').textContent = options.baudrate;
         appendLine(`[系统] 串口连接成功，设备码: ${deviceCode}`, 'info');
         
+        // 连接成功后建立WebSocket连接
+        connectWS();
+        
       } catch (error) {
         console.error('连接失败:', error);
-        alert('连接失败: ' + error.message);
+        appendLine(`[错误] 连接失败: ${error.message}`, 'error');
       }
     }
 
@@ -419,47 +434,85 @@
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws/live`);
       state.ws = ws;
-      // The status element is removed from the new HTML, so this line is no longer needed.
-      // $('status').textContent = '连接中...';
-      ws.onopen = () => { 
-        // The status element is removed from the new HTML, so this line is no longer needed.
-        // $('status').textContent = '已连接';
+      
+      ws.onopen = () => {
+          appendLine('[系统] WebSocket连接已建立', 'info');
       };
-      ws.onclose = () => { 
-        // The status element is removed from the new HTML, so this line is no longer needed.
-        // $('status').textContent = '未连接';
+      
+      ws.onclose = () => {
+          appendLine('[系统] WebSocket连接已断开', 'info');
+          // 自动重连
+          setTimeout(connectWS, 3000);
       };
-      ws.onerror = () => { 
-        // The status element is removed from the new HTML, so this line is no longer needed.
-        // $('status').textContent = '连接错误';
+      
+      ws.onerror = () => {
+          appendLine('[系统] WebSocket连接发生错误', 'error');
       };
+      
       ws.onmessage = (ev) => {
-        if (state.paused) return;
-        appendLine(ev.data, 'info');
+          if (state.paused) return;
+          const data = ev.data;
+          // 特殊处理远程发送的控制命令
+          if (data.startsWith('[CONTROL]')) {
+              appendLine(data, 'warn');
+              // 如果串口已连接，则发送命令到串口
+              if (window.serialManager && window.serialManager.isConnected) {
+                  const command = data.replace('[CONTROL] ', '').trim();
+                  window.serialManager.writeData(command).catch(error => {
+                      appendLine(`[错误] 发送命令到串口失败: ${error.message}`, 'error');
+                  });
+              }
+          } else {
+              appendLine(data, 'info');
+          }
       };
+      
       setInterval(() => { try { ws.readyState === 1 && ws.send('ping'); } catch {} }, 15000);
     }
 
-    // 添加日志行
+    // 修改appendLine函数以支持更多消息类型
     function appendLine(text, level = 'info') {
       if (state.paused) return;
       
       const el = document.createElement('div');
-      el.className = `mb-1 ${level === 'info' ? 'text-slate-700 dark:text-slate-300' : level === 'warn' ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`;
+      el.className = 'mb-1';
       
       const now = new Date();
       const timestamp = now.toLocaleTimeString();
       
-      if (text.startsWith('[系统]') || text.startsWith('[SENT]') || text.startsWith('[CONTROL]')) {
-        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium">${text}</span>`;
+      let className = '';
+      let prefix = '';
+      
+      if (text.startsWith('[系统]')) {
+          className = 'text-primary-600 dark:text-primary-400';
+          prefix = timestamp;
+      } else if (text.startsWith('[CONTROL]')) {
+          className = 'text-purple-600 dark:text-purple-400 font-medium';
+          prefix = timestamp + ' 远程命令 >';
+          text = text.replace('[CONTROL] ', '');
+      } else if (text.startsWith('[SENT]')) {
+          className = 'text-amber-600 dark:text-amber-400 font-medium';
+          prefix = timestamp + ' 本地发送 >';
+          text = text.replace('[SENT] ', '');
+      } else if (text.startsWith('[错误]')) {
+          className = 'text-red-600 dark:text-red-400';
+          prefix = timestamp;
+      } else if (text.startsWith('>')) {
+          className = 'text-amber-600 dark:text-amber-400';
+          prefix = timestamp;
       } else {
-        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> ${text}`;
+          className = level === 'info' ? 'text-slate-700 dark:text-slate-300' : 
+                     level === 'warn' ? 'text-amber-600 dark:text-amber-400' : 
+                     'text-red-600 dark:text-red-400';
+          prefix = timestamp;
       }
+      
+      el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${prefix}</span> <span class="${className}">${text}</span>`;
       
       $('logs').appendChild(el);
       
       if (state.autoScroll) {
-        $('logs').scrollTop = $('logs').scrollHeight;
+          $('logs').scrollTop = $('logs').scrollHeight;
       }
       
       // 更新消息计数
@@ -469,7 +522,47 @@
       // 限制日志条数
       const maxLines = 1000;
       while ($('logs').children.length > maxLines) {
-        $('logs').removeChild($('logs').firstChild);
+          $('logs').removeChild($('logs').firstChild);
+      }
+    }
+
+    // 添加设置控制口令的功能
+    async function setControlSecret() {
+      const secret = $('controlSecret').value.trim();
+      if (!state.device_code || state.device_code === '--------') {
+        appendLine('[错误] 请先连接串口设备', 'error');
+        return;
+      }
+      if (secret.length < 6) {
+        appendLine('[错误] 控制口令至少需要6位', 'error');
+        return;
+      }
+
+      try {
+        appendLine('[系统] 正在设置控制口令...', 'info');
+        const res = await fetch('/api/device/secret', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            device_code: state.device_code,
+            secret: secret 
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({error:'未知错误'}));
+          appendLine(`[错误] 设置控制口令失败：${err.error || res.status}`, 'error');
+          console.error('设置控制口令失败:', err);
+          return;
+        }
+
+        appendLine('[系统] 控制口令设置成功', 'info');
+        appendLine(`[系统] 当前设备码: ${state.device_code}`, 'info');
+        // 清空输入框
+        $('controlSecret').value = '';
+      } catch (error) {
+        console.error('设置控制口令失败:', error);
+        appendLine('[错误] 设置控制口令失败：' + error.message, 'error');
       }
     }
 
@@ -615,6 +708,12 @@
     // The loadDevice function is now called directly.
     loadDevice();
     loadConfig();
+    $('saveSecret').onclick = setControlSecret;
+    $('controlSecret').onkeypress = (e) => {
+      if (e.key === 'Enter') {
+        setControlSecret();
+      }
+    };
   </script>
 </body>
 </html> 

@@ -95,6 +95,7 @@
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">控制口令</label>
               <input id="token" type="password" placeholder="输入控制口令" 
                 class="w-full px-3 py-2 rounded-md border-gray-300 dark:border-slate-600 dark:bg-slate-700" />
+              <p class="mt-1 text-sm text-gray-500">控制口令由设备端设置，请联系设备管理员获取</p>
             </div>
             <div class="flex items-center justify-between">
               <label class="flex items-center space-x-2">
@@ -102,7 +103,7 @@
                 <span class="text-sm text-gray-700 dark:text-gray-300">自动换行</span>
               </label>
               <button id="saveToken" class="text-sm text-primary-600 hover:text-primary-500">
-                保存口令
+                记住口令
               </button>
             </div>
           </div>
@@ -186,7 +187,8 @@
       code: '', 
       paused: false, 
       autoScroll: true,
-      messageCount: 0
+      messageCount: 0,
+      tokenValidated: false  // 新增：口令验证状态
     };
 
     function applyTheme() {
@@ -217,6 +219,8 @@
           text.textContent = '已连接';
           status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200';
           status.textContent = '已连接';
+          // 连接成功后验证控制口令
+          validateControlToken();
           break;
         case 'disconnected':
           icon.className = 'h-4 w-4 rounded-full bg-gray-400';
@@ -230,6 +234,76 @@
           status.className = 'text-sm font-medium px-2 py-1 rounded-md bg-red-100 dark:bg-red-800 text-red-800 dark:text-red-200';
           status.textContent = '连接错误';
           break;
+      }
+    }
+
+    // 验证控制口令
+    async function validateControlToken() {
+        const code = state.code || $('code').value.trim();
+        const token = $('token').value.trim();
+        if (!code || !token) return;
+
+        try {
+            appendLine('[系统] 正在验证控制口令...', 'info');
+            // 使用发送空命令的方式来验证口令
+            const res = await fetch('/api/control/send', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    device_code: code, 
+                    token,
+                    data: '_[][]',
+                    append_newline: false
+                })
+            });
+
+            if (res.ok) {
+                appendLine('[系统] 控制口令验证成功', 'info');
+                // 保存有效的口令
+                localStorage.setItem('viewer_token', token);
+                state.tokenValidated = true;
+                return true;
+            } else {
+                const err = await res.json().catch(() => ({error:'未知错误'}));
+                if (res.status === 403) {
+                    appendLine('[错误] 控制口令无效', 'error');
+                    state.tokenValidated = false;
+                } else {
+                    appendLine(`[错误] 验证控制口令失败：${err.error || res.status}`, 'error');
+                    // 如果不是口令无效的错误，不重置验证状态
+                    if (err.error === 'invalid token') {
+                        state.tokenValidated = false;
+                    }
+                }
+            }
+        } catch (error) {
+            appendLine('[错误] 验证控制口令失败，请检查网络连接', 'error');
+            // 网络错误不重置验证状态
+            console.error('验证控制口令失败:', error);
+        }
+        return false;
+    }
+
+    async function checkDeviceSecret() {
+      const code = state.code || $('code').value.trim();
+      if (!code) return;
+      
+      try {
+        const res = await fetch(`/api/device/list`);
+        if (!res.ok) {
+          appendLine('[错误] 获取设备信息失败');
+          return;
+        }
+        const data = await res.json();
+        const device = data.devices?.find(d => d.device_code === code);
+        if (device && !device.has_control_secret) {
+          // Removed secretSection.classList.remove('hidden');
+          appendLine('[系统] 设备尚未设置控制口令，请设置');
+        } else {
+          // Removed secretSection.classList.add('hidden');
+        }
+      } catch (error) {
+        appendLine('[错误] 检查设备控制口令状态失败');
       }
     }
 
@@ -275,6 +349,10 @@
       
       if (text.startsWith('[系统]')) {
         el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium text-primary-600 dark:text-primary-400">${text}</span>`;
+      } else if (text.startsWith('[错误]')) {
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium text-red-600 dark:text-red-400">${text}</span>`;
+      } else if (text.startsWith('[CONTROL]')) {
+        el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> <span class="font-medium text-green-600 dark:text-green-400">${text}</span>`;
       } else {
         el.innerHTML = `<span class="text-gray-500 dark:text-gray-400">${timestamp}</span> ${text}`;
       }
@@ -343,31 +421,95 @@
       }
     };
 
-    $('saveToken').onclick = () => {
-      const t = $('token').value.trim();
-      localStorage.setItem('viewer_token', t);
-      alert('已保存');
+    $('saveToken').onclick = async () => {
+      const token = $('token').value.trim();
+      if (!token) {
+        appendLine('[错误] 请输入控制口令');
+        $('token').focus();
+        return;
+      }
+
+      // 验证口令是否有效
+      await validateControlToken();
+      if (state.tokenValidated) {
+        localStorage.setItem('viewer_token', token);
+        appendLine('[系统] 控制口令已保存');
+      }
     };
+
+    // 设置控制口令
+    // Removed setSecret function
 
     $('sendCmd').onclick = async () => {
       const code = state.code || $('code').value.trim();
-      if (!code) { alert('请先连接设备'); return; }
-      const token = $('token').value.trim();
-      const data = $('cmd').value;
-      if (!token) { alert('请填写控制口令'); return; }
-      if (!data) { alert('请输入命令内容'); return; }
-      const res = await fetch('/api/control/send', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device_code: code, token, data, append_newline: $('appendNl').checked })
-      });
-      if (!res.ok) { 
-        const err = await res.json().catch(()=>({error:'未知错误'})); 
-        alert('发送失败：' + (err.error||res.status)); 
+      if (!code) { 
+        appendLine('[错误] 请先连接设备');
+        $('code').focus();
         return; 
       }
-      $('cmd').value = '';
-      appendLine(`[系统] 命令已发送`);
+      const token = $('token').value.trim();
+      const data = $('cmd').value;
+      if (!token) { 
+        appendLine('[错误] 请填写控制口令');
+        $('token').focus();
+        return; 
+      }
+      if (!data) { 
+        appendLine('[错误] 请输入命令内容');
+        $('cmd').focus();
+        return; 
+      }
+
+      // 如果口令未验证或验证失败，先进行验证
+      if (!state.tokenValidated) {
+        await validateControlToken();
+        if (!state.tokenValidated) {
+          return;
+        }
+      }
+
+      try {
+        const res = await fetch('/api/control/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            device_code: code, 
+            token, 
+            data, 
+            append_newline: $('appendNl').checked 
+          })
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({error:'未知错误'}));
+          let errorMsg = '发送失败';
+          switch (res.status) {
+            case 404:
+              errorMsg = '设备未找到或未连接';
+              break;
+            case 403:
+              errorMsg = '控制口令无效';
+              // 只在确实是口令无效时才重置验证状态
+              if (err.error === 'invalid token') {
+                state.tokenValidated = false;
+                appendLine('[系统] 控制口令已失效，请重新验证', 'error');
+              }
+              break;
+            case 429:
+              errorMsg = '发送过于频繁，请稍后再试';
+              break;
+            default:
+              errorMsg = `发送失败：${err.error || res.status}`;
+          }
+          appendLine(`[错误] ${errorMsg}`);
+          return;
+        }
+
+        $('cmd').value = '';
+        appendLine('[系统] 命令已发送');
+      } catch (error) {
+        appendLine('[错误] 网络错误，请检查连接');
+      }
     };
 
     loadSavedToken();
