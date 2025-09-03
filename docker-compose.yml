@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  xlremote:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: xlremote-serial
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data  # 持久化数据存储
+      - .:/app  # 开发时代码热更新
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SERIAL_MODE=web
+      - PYTHONDONTWRITEBYTECODE=1
+    restart: unless-stopped
+    tty: true  # 保持终端
+    stdin_open: true  # 保持标准输入开启
